@@ -1,0 +1,6 @@
+{
+  "name": "PlayBook",
+  "description": "Comprehensive operating system for freelancers to manage clients, tasks, time tracking, schedules, earnings, goals, budgets, and performance reports.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

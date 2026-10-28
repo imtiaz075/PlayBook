@@ -1,0 +1,1247 @@
+# MASTER PROMPT: Build an Advanced Freelancer Management System
+
+## 1. Project Overview
+
+Act as an expert SaaS product designer, senior UX/UI designer, product architect, and full-stack developer. Design and build a complete, modern, intelligent, and fully functional **Freelancer Management System** that helps freelancers manage their daily work, schedules, tasks, clients, time tracking, goals, earnings, personal budgets, and performance reports in one place.
+
+This must be a working application, not just a static dashboard or visual prototype. All forms, buttons, timers, calculations, filters, charts, notifications, and page interactions should work correctly.
+
+The application should be suitable for freelancers working on platforms such as Fiverr, Upwork, Freelancer.com, PeoplePerHour, Guru, LinkedIn, and direct client projects.
+
+The product should feel like a personal freelancer operating system: organized, motivating, intelligent, efficient, and easy to use every day.
+
+## 2. Navigation and Page Hierarchy
+
+Create nine primary navigation pages in the following order:
+
+1. Dashboard
+2. Today
+3. Schedule
+4. Tasks
+5. Time Tracker
+6. Contacts
+7. Earnings
+8. Goals
+9. Budget
+10. Reports
+
+Although the initial scope mentions nine pages, all ten sections listed above are required because the dashboard is a separate overview page.
+
+### Navigation principles
+
+- Use a persistent left sidebar on desktop.
+- Place Dashboard at the top.
+- Make Today visually prominent because it is the main daily workspace.
+- Keep Schedule, Tasks, and Time Tracker near the top because they are used frequently.
+- Place Contacts before financial summaries because client information connects to tasks, tracked time, invoices, and payments.
+- Place Earnings, Goals, Budget, and Reports afterward.
+- Show a clear active-page indicator.
+- Allow the sidebar to collapse.
+- On mobile, use a compact navigation drawer or bottom navigation for the most frequently used pages.
+- Include a global quick-add action for creating tasks, schedules, expenses, contacts, and goals without navigating through multiple screens.
+
+Use the same client records, project records, schedules, tasks, invoices, time entries, goals, and financial transactions throughout the application. Do not create disconnected duplicate data for individual pages.
+
+## 3. Global Application Requirements
+
+### Consistent data and automatic calculations
+
+All relevant information must update automatically across the application.
+
+For example:
+
+- Completing a task updates task statistics and the Dashboard.
+- Completing a milestone updates Goal progress.
+- Recording time updates the Time Tracker, client records, project totals, and billable amounts.
+- Generating an invoice updates invoice statistics and the relevant client balance.
+- Recording a payment updates Earnings, the project balance, and the client payment history.
+- Adding an expense updates Budget and financial reports.
+- Completing a schedule updates the daily and weekly statistics.
+- Changing a deadline updates reminders and the Needs Attention section.
+- Closing a client does not delete their historical projects, payments, or invoices.
+
+### Global notifications and reminders
+
+Create a centralized notification system that supports:
+
+- In-app notifications.
+- Browser notifications where permission is granted.
+- Optional audible alerts.
+- Configurable reminders.
+- Deadline warnings.
+- Scheduled activity reminders.
+- Goal deadline reminders.
+- Payment release reminders.
+- Invoice due-date reminders.
+- Subscription renewal reminders.
+
+Allow the user to configure notification preferences. Request browser notification permission only when appropriate, and provide an in-app fallback if permission is denied.
+
+Do not promise alerts while the application is closed unless a supported background notification mechanism has been implemented.
+
+### Data integrity
+
+- Use a persistent database rather than temporary page-only state.
+- Validate all form inputs.
+- Store monetary values using precise decimal or integer minor-unit representations.
+- Use consistent currency conversion rules.
+- Store timestamps consistently and display them in the user's local timezone.
+- Prevent duplicate invoices and accidental duplicate payments.
+- Maintain a history of important changes to financial records.
+- Support editing, archiving, and restoring records where appropriate.
+- Confirm destructive actions before permanently deleting information.
+- Never count the same payment or time entry twice.
+
+## 4. Dashboard
+
+The Dashboard should provide a high-level summary of the freelancer's work and financial performance without duplicating every statistic from every other page.
+
+### A. Daily motivation banner
+
+At the very top, create a visually appealing motivational banner that displays the current date, the user's daily progress, and a short motivational message.
+
+Examples:
+
+- "Small steps today. Bigger results tomorrow."
+- "Your consistency is building your future."
+- "Every completed task moves you forward."
+
+Rotate or personalize motivational messages without making the banner distracting.
+
+Include a compact daily achievement count based on actual recorded activity, such as completed tasks, completed milestones, or focused work sessions. Do not invent achievements or display misleading motivational statistics.
+
+### B. Today at a glance
+
+Display a compact summary of the most important daily activities:
+
+- Tasks completed today.
+- Total time tracked today.
+- Schedules completed today.
+- Milestones completed today.
+- New contacts or client interactions recorded today.
+- Today's earned or received payments, clearly distinguishing earned revenue from money actually received.
+
+Make each metric clickable so the user can open the corresponding section.
+
+### C. Needs Attention
+
+Show a prominent red or amber warning section only when an item actually requires attention.
+
+Include relevant tasks, goals, schedules, invoices, or other deadline-based items approaching their deadlines or already overdue.
+
+Each item should show:
+
+- Title.
+- Related client or project.
+- Deadline or due date.
+- Remaining time, where applicable.
+- Priority or severity.
+- A direct action to open or complete the item.
+
+Hide this section entirely when there is nothing requiring attention.
+
+Use red for overdue or critical items and amber for approaching deadlines.
+
+### D. Seven-day performance overview
+
+Show a concise summary of the previous seven days:
+
+- Tasks completed.
+- Time tracked.
+- Revenue earned.
+- Payments received.
+- Goals or milestones achieved.
+- Expenses recorded.
+
+Include a comparison with the preceding seven-day period where reliable data is available.
+
+Clearly distinguish completed work, invoiced revenue, pending payments, and received payments.
+
+### E. Key performance charts
+
+Include compact, useful visualizations such as:
+
+- Daily work hours over the last seven days.
+- Revenue and payments over time.
+- Task completion progress.
+- Monthly goal progress.
+- Budget spending versus planned spending.
+
+Use charts only where they help the user understand progress. Avoid excessive graphs and repeated statistics.
+
+### F. Quick actions
+
+Provide quick-access actions for:
+
+- Add Task.
+- Add Schedule.
+- Start Timer.
+- Add Contact.
+- Create Invoice.
+- Add Expense.
+- Add Goal.
+
+The Dashboard must be informative at a glance and must not replace the detailed functionality of the individual pages.
+
+## 5. Today Page
+
+The Today page is the main daily workspace and should be one of the most important pages in the application.
+
+### A. Daily progress header
+
+Display the current date, daily progress, and the number of important items requiring completion.
+
+Show clear counts for:
+
+- Tasks to complete today.
+- Schedules planned for today.
+- Goals or milestones due today.
+- Deadlines requiring attention.
+- Payments expected today, where applicable.
+
+Provide a daily completion indicator based on completed and remaining items.
+
+Do not combine unrelated items into one misleading completion percentage.
+
+### B. Today's activity sections
+
+Organize the page into distinct sections:
+
+1. Tasks due today.
+2. Today's schedule and activities.
+3. Goals and milestones due today.
+4. Earnings and expected payments.
+5. Deadlines and overdue items.
+6. Completed activities.
+
+Display the most urgent items first.
+
+Allow users to complete tasks, check off activities, start timers, open client records, and view related project details directly from this page.
+
+### C. Conditional Needs Attention section
+
+Display this section only when a deadline is approaching, an item is overdue, or a significant action is required.
+
+Automatically identify relevant tasks, milestones, schedules, invoices, or payments.
+
+Provide clear labels such as:
+
+- Due Soon.
+- Due Today.
+- Overdue.
+- Payment Pending.
+- Action Required.
+
+Allow the user to dismiss a notification when appropriate without silently changing the underlying task or payment status.
+
+### D. Daily notifications
+
+Display small notification counters indicating how many tasks or activities require attention.
+
+Counters must update automatically when items are completed, rescheduled, or otherwise resolved.
+
+## 6. Schedule Page
+
+Build a scheduling system for activities, reminders, appointments, and planned work sessions.
+
+### A. Statistics
+
+At the top, display:
+
+- Total scheduled items.
+- Completed schedules.
+- Upcoming schedules.
+- Missed schedules.
+
+Allow users to filter these statistics by day, week, and month.
+
+### B. Schedule list
+
+Show scheduled activities and reminders in chronological order.
+
+Each item should include:
+
+- Title.
+- Date and time.
+- Type.
+- Notes.
+- Completion status.
+- Reminder status.
+
+Provide options to edit, complete, reschedule, or delete an item.
+
+### C. Add Schedule form
+
+Create an Add Schedule button that opens a clean form containing:
+
+- Schedule title.
+- Date.
+- Start time.
+- Optional end time or duration.
+- Type: Activity or Reminder.
+- Notes.
+- Alert me at the scheduled time checkbox.
+- Optional advance reminder.
+- Optional repeat setting.
+
+Support repeat schedules such as daily, weekly, and monthly, with an option to configure an end date.
+
+Repeating schedules should generate the appropriate occurrences without duplicating completed historical records.
+
+### D. Calendar integration
+
+Provide a dedicated Calendar button.
+
+Clicking it should open a calendar view or calendar selection interface rather than occupying the entire Schedule page with a permanent calendar.
+
+Allow users to select dates, view scheduled activities, and create schedules from a selected date.
+
+### E. Alerts
+
+Trigger an in-app notification and, when enabled and supported, an audible or browser notification at the configured time.
+
+Avoid repeatedly sounding the same alarm after it has been acknowledged.
+
+## 7. Tasks Page
+
+Build a comprehensive project and task management system organized by freelancing platform.
+
+### A. Task statistics and views
+
+Display:
+
+- Open tasks.
+- In-progress tasks.
+- Completed tasks.
+- Overdue tasks.
+- Tasks requiring attention.
+
+Provide filter tabs or views for:
+
+- All Projects.
+- Open.
+- In Progress.
+- Completed.
+- Overdue.
+
+The platform sections should be dynamically generated from project records rather than hardcoded as unrelated lists.
+
+### B. Platform-based organization
+
+Support these platforms initially:
+
+- Fiverr.
+- Upwork.
+- Freelancer.com.
+- PeoplePerHour.
+- Guru.
+- LinkedIn.
+- Direct Clients.
+- Other.
+
+Allow users to add custom platforms.
+
+When a task is assigned to a platform, automatically show it under that platform's section.
+
+For example, Fiverr projects appear in the Fiverr section and Upwork projects appear in the Upwork section.
+
+Each platform section should display useful totals such as active projects, completed projects, gross project value, platform fees, and net earnings where applicable.
+
+### C. Add Task form
+
+The Add Task form should include:
+
+1. Task or project name.
+2. Deadline.
+3. Priority: High, Medium, or Low.
+4. Client or contact.
+5. Option to add a new client without leaving the form.
+6. Platform.
+7. Project price in the selected currency, with USDT support where needed.
+8. Optional hourly rate.
+9. Optional estimated duration.
+10. Optional notes.
+11. Optional recurring reminder.
+12. Deadline alert checkbox.
+13. Optional start date.
+14. Project status.
+
+Validate required fields and provide helpful error messages.
+
+Allow users to distinguish fixed-price projects from hourly projects.
+
+### D. Deadline management
+
+Automatically identify overdue projects and projects approaching their deadlines.
+
+Place urgent projects at the top of the relevant list and display a prominent "Needs Attention Immediately" label for overdue or critical tasks.
+
+Support configurable warning intervals, such as 24 hours, 48 hours, or a custom period.
+
+### E. Project cards
+
+Every project card should display:
+
+- Project name.
+- Client.
+- Platform.
+- Deadline.
+- Priority.
+- Project status.
+- Total project price.
+- Platform fee, if applicable.
+- Estimated net earnings.
+- Amount paid.
+- Remaining client balance.
+- Time tracked.
+- Progress indicator.
+
+Provide direct actions to open project details, start a timer, record a payment, and create an invoice.
+
+### F. Smart platform fee calculations
+
+Calculate estimated platform fees and net project earnings using configurable fee rules.
+
+Use these initial defaults as examples:
+
+- Fiverr: 20% fee.
+- Upwork: 15% fee.
+- Direct Clients: 0% fee.
+- LinkedIn-sourced direct work: 0% fee unless an actual intermediary fee applies.
+
+These values must be configurable because platform policies and account-specific fees may change. Do not assume that every Upwork contract has the same fee.
+
+Formula:
+
+Net project value = Gross project price − Applicable platform fee.
+
+For example, if a Fiverr project is worth 100 USDT and the configured fee is 20%, display:
+
+- Gross project value: 100 USDT.
+- Estimated platform fee: 20 USDT.
+- Estimated net project value: 80 USDT.
+
+Clearly label estimates as estimates until actual payment information is available.
+
+For direct clients, do not deduct a platform fee by default.
+
+### G. Project payment tracking
+
+Support partial payments and outstanding balances.
+
+For each project, record:
+
+- Agreed project price.
+- Total amount paid by the client.
+- Platform fees.
+- Other applicable deductions.
+- Net amount received.
+- Remaining amount owed.
+- Payment status.
+
+Calculate:
+
+Remaining balance = Agreed client amount − Recorded client payments.
+
+Do not subtract platform fees from the client's outstanding balance. Client debt and freelancer net earnings are separate calculations.
+
+Allow the user to record a partial payment and automatically recalculate the remaining balance.
+
+### H. Project time tracking
+
+Include a Start Timer button on each eligible project.
+
+The timer must associate tracked time with the correct project and client.
+
+Prevent multiple timers from running simultaneously unless the application explicitly supports multiple concurrent timers with clear rules.
+
+Allow users to pause, resume, and stop the timer.
+
+### I. Payment release tracking
+
+When a project is marked as completed, allow the user to record or confirm the expected platform payout date.
+
+Use configurable example defaults:
+
+- Fiverr: 15 days after the applicable clearance start date.
+- Upwork: 5 days after the applicable payment release or approval event, depending on contract type and payment method.
+
+Do not blindly start a payout countdown on project completion if the platform's actual clearance process has not started.
+
+Show:
+
+- Completion date.
+- Expected clearance or release date.
+- Days remaining.
+- Expected net payout.
+- Actual payout status.
+
+Send a reminder when the expected payment date arrives or the payment becomes overdue.
+
+Clearly label platform payout dates as estimates unless confirmed by the platform.
+
+### J. Project history
+
+Each project should have a detail view showing its activity history, time entries, invoices, payments, notes, milestones, and status changes.
+
+## 8. Time Tracker Page
+
+Build an intelligent time-tracking and billable-work system that connects directly to projects and clients.
+
+### A. Time-tracking statistics
+
+Display:
+
+- Total time tracked.
+- Billable time value.
+- Uninvoiced billable work.
+- Invoiced but unpaid amount.
+- Paid invoice amount.
+- Total active timers.
+
+Provide date filters for today, this week, this month, and custom ranges.
+
+Clearly distinguish time value from money actually earned or received.
+
+### B. Active timer
+
+Create a prominent timer interface with:
+
+- Project selection.
+- Client selection.
+- Timer start, pause, resume, and stop.
+- Elapsed time.
+- Applicable hourly rate.
+- Current billable value.
+
+Use the client's or project's applicable hourly rate.
+
+Calculate billable value using tracked billable seconds and the configured billing and rounding rules.
+
+Do not lose recorded time when the user navigates to another page or refreshes the application.
+
+Use a reliable timestamp-based timer calculation rather than depending exclusively on a continuously running browser counter.
+
+### C. Manual time entry
+
+Allow users to enter time manually for a selected client or project.
+
+Fields:
+
+- Client.
+- Project.
+- Date.
+- Start time and end time, or duration.
+- Hourly rate.
+- Billable or non-billable.
+- Description or notes.
+
+Validate time ranges and prevent accidental duplicate entries.
+
+Allow users to edit time entries while preserving a change history where appropriate.
+
+### D. Automatic billable calculations
+
+For hourly work:
+
+Billable value = Billable hours × Applicable hourly rate.
+
+For example, 3 hours at 20 USDT per hour produces a billable value of 60 USDT before applicable tax or other adjustments.
+
+The application should automatically group tracked time by project and client.
+
+Show:
+
+- Total hours worked.
+- Billable hours.
+- Non-billable hours.
+- Total billable value.
+- Time already invoiced.
+- Time not yet invoiced.
+- Amount paid.
+- Amount still outstanding.
+
+Avoid counting the same time entry in multiple invoices.
+
+### E. Timer completion summary
+
+When the user stops a timer, display a summary popup containing:
+
+- Project and client.
+- Session duration.
+- Total billable value.
+- Updated project time.
+- Updated client time.
+- Option to create an invoice.
+- Option to close the popup.
+
+Closing the popup must not delete or discard the recorded time.
+
+If the user chooses Create Invoice, open the invoice form with the client, project, duration, hourly rate, and amount prefilled.
+
+### F. Invoice creation
+
+Provide a Create Invoice button on the Time Tracker page.
+
+Invoice fields should include:
+
+- Invoice number generated automatically.
+- Client selection.
+- New Client button.
+- Client details populated from the Contacts page.
+- Related project.
+- Invoice issue date.
+- Due date.
+- Line items.
+- Quantity or hours.
+- Hourly rate or fixed amount.
+- Subtotal.
+- Discount.
+- Tax.
+- Total.
+- Amount already paid.
+- Remaining balance.
+- Notes and payment terms.
+
+Support partial payments and multiple invoice line items.
+
+Generate a professional PDF invoice with the freelancer's details, client details, invoice number, dates, itemized charges, taxes, discounts, total, and payment instructions.
+
+Allow the user to preview and download the PDF.
+
+Do not invent legal registration details or payment information.
+
+### G. Invoice tracking
+
+Provide invoice status categories:
+
+- Draft.
+- Issued.
+- Partially Paid.
+- Paid.
+- Overdue.
+- Cancelled.
+
+When an invoice is issued, associate it with the relevant time entries or project amounts so they cannot accidentally be invoiced twice.
+
+When a payment is recorded, update the invoice balance and client payment history.
+
+A generated PDF alone does not mean an invoice has been paid.
+
+## 9. Contacts Page
+
+Build a client relationship management system.
+
+### A. Contact overview
+
+Show separate views for:
+
+- Active Clients.
+- Closed or Archived Clients.
+- All Contacts.
+
+Include a search field and filters for client source, status, and project activity.
+
+Display useful summary metrics such as total active clients, active projects, and outstanding client balances.
+
+### B. Add Contact form
+
+Include these fields:
+
+- Full name.
+- Company name.
+- Client source.
+- Phone number.
+- Email address.
+- Website, if available.
+- Address.
+- Country.
+- Preferred currency.
+- Hourly rate, if applicable.
+- Agreed payment terms.
+- Total deal value.
+- Notes.
+- Client status.
+
+Client source should support Fiverr, Upwork, LinkedIn, Freelancer.com, PeoplePerHour, Guru, direct contact, referrals, and custom sources.
+
+Allow optional fields to remain blank when information is unavailable.
+
+### C. Client detail page
+
+Each client should have a dedicated profile showing:
+
+- Contact information.
+- Active and completed projects.
+- Total agreed project value.
+- Total payments received.
+- Outstanding client balance.
+- Tracked hours.
+- Billable work.
+- Invoices.
+- Payment history.
+- Related notes and activity history.
+
+Provide buttons to add a project, record a payment, start a timer, and create an invoice.
+
+### D. Client status
+
+Allow users to mark clients as active, inactive, closed, or archived.
+
+Closing a client should preserve historical information and financial records.
+
+## 10. Earnings Page
+
+Build an earnings and payment management dashboard.
+
+### A. Currency conversion
+
+Allow the user to choose their preferred display currency based on their country.
+
+Include support for currencies such as:
+
+- USD.
+- PKR.
+- INR.
+- BDT.
+- GBP.
+- EUR.
+- AED.
+- SAR.
+- CAD.
+- AUD.
+- Other common currencies.
+
+Use USD as a convenient reference currency where appropriate, and support USDT for project records when required.
+
+Retrieve current exchange rates from a reliable exchange-rate provider. Show the last update time and provide a manual refresh action.
+
+Do not hardcode exchange rates or claim rates are current when the exchange-rate service is unavailable.
+
+Allow manual rate entry as a fallback.
+
+Store the original transaction amount and currency. Use exchange rates for display and reporting conversions without silently rewriting historical transactions.
+
+Clearly distinguish an indicative conversion from an actual payment or exchange.
+
+### B. Earnings statistics
+
+Display:
+
+- Earnings for the current month.
+- Payments received this month.
+- Outstanding client payments.
+- Expected platform payouts.
+- Number of completed payments.
+- Invoiced but unpaid amount.
+- Monthly earnings goal.
+- Remaining amount needed to reach the goal.
+
+Separate gross project value, net earnings after fees, invoiced revenue, and actual cash received.
+
+### C. Monthly goal progress
+
+Show a monthly earnings progress bar or gauge.
+
+Display:
+
+- Target.
+- Actual progress.
+- Remaining amount.
+- Percentage completed.
+- Comparison with previous months.
+
+Use recorded and confirmed data for progress calculations.
+
+### D. Earnings graphs
+
+Include:
+
+- Monthly earnings trend.
+- Payments received over time.
+- Gross versus net earnings.
+- Earnings by client.
+- Earnings by platform.
+
+### E. Earnings by client
+
+Create a section ranking clients by earnings for a selected period.
+
+Display each client's:
+
+- Name.
+- Total billed.
+- Total received.
+- Outstanding balance.
+- Net earnings where applicable.
+
+Update this section automatically from project, invoice, fee, and payment records.
+
+### F. Payment history
+
+List recorded payments with the associated client, project, invoice, date, amount, currency, and payment method.
+
+Allow users to record payments manually and mark expected payments as received.
+
+Never mark a payment as received simply because its expected release date has arrived.
+
+## 11. Goals Page
+
+Build a goal-setting and milestone-tracking system for professional and personal objectives.
+
+### A. Goal statistics
+
+Display:
+
+- Active goals.
+- Completed goals.
+- Milestones completed.
+- Overdue goals.
+
+### B. Add Goal form
+
+Include:
+
+- Goal name.
+- Goal type.
+- Target date.
+- Target value, if applicable.
+- Milestones.
+- Notes.
+- Priority.
+- Reminder settings.
+- Progress measurement method.
+
+Support goals such as:
+
+- Monthly income target.
+- Complete a certain number of projects.
+- Work a specific number of hours.
+- Acquire new clients.
+- Complete a learning objective.
+- Save a target amount.
+- Other custom goals.
+
+### C. Milestones
+
+Allow each goal to contain multiple milestones.
+
+For every milestone, provide:
+
+- Title.
+- Target date.
+- Completion checkbox.
+- Optional target value.
+- Optional notes.
+- Reminder settings.
+
+Update goal progress automatically from completed milestones when milestone-based tracking is selected.
+
+For numeric goals, calculate progress using the recorded actual value and target value.
+
+For manually measured goals, allow the user to update progress explicitly.
+
+### D. Progress visualization
+
+Show:
+
+- Overall completion percentage.
+- Completed milestones.
+- Remaining milestones.
+- Target date.
+- Days remaining.
+- Overdue status.
+
+For numeric goals, display the remaining amount or work needed.
+
+Do not allow progress to exceed 100% unless the user explicitly chooses to show overachievement.
+
+### E. Goal reminders
+
+Allow reminders before the deadline and when a milestone becomes overdue.
+
+Show relevant goals on the Today page and Dashboard when they require attention.
+
+## 12. Budget Page
+
+Build a flexible budget planner for freelancers, households, and personal financial management.
+
+### A. Budget statistics
+
+Display:
+
+- Total planned spending.
+- Actual spending so far.
+- Remaining budget.
+- Total income recorded.
+- Savings.
+- Upcoming expenses.
+
+Allow filtering by month and custom date range.
+
+### B. Budget categories
+
+Provide editable default categories:
+
+- Rent and Housing.
+- Food and Groceries.
+- Transportation.
+- Utilities.
+- Internet and Mobile.
+- Business Expenses.
+- Software and Subscriptions.
+- Health.
+- Education.
+- Family and Household.
+- Savings.
+- Debt Payments.
+- Entertainment.
+- Taxes.
+- Other.
+
+Allow users to add, edit, reorder, and archive categories.
+
+### C. Monthly budget planning
+
+Allow the user to set a spending limit for each category.
+
+Display:
+
+- Planned budget.
+- Amount spent.
+- Remaining amount.
+- Percentage used.
+- Over-budget warning.
+
+Use progress bars and clear status indicators.
+
+### D. Add Expense form
+
+Include:
+
+- Expense title.
+- Amount.
+- Currency.
+- Date.
+- Category.
+- Payment method.
+- Optional recurring expense.
+- Notes.
+
+Update category spending, total spending, and remaining budget automatically.
+
+### E. Upcoming expenses and subscriptions
+
+Allow users to record future expenses, subscription renewals, recurring bills, and payment dates.
+
+Include:
+
+- Subscription or expense name.
+- Amount.
+- Currency.
+- Category.
+- Renewal or due date.
+- Recurrence.
+- Reminder timing.
+- Active or cancelled status.
+
+Send reminders before upcoming renewals or payments.
+
+Prevent cancelled subscriptions from generating future reminders unless explicitly reactivated.
+
+### F. Savings and financial overview
+
+Allow users to track savings targets separately from ordinary spending.
+
+Display income, expenses, net cash flow, and savings contributions without double-counting transfers between the user's own accounts.
+
+The Budget page must be usable even when the user is not earning a regular income.
+
+## 13. Reports Page
+
+Build a comprehensive reporting center that combines data from all application modules.
+
+### A. Monthly overview
+
+Display the selected month's:
+
+- Gross project value.
+- Net earnings after recorded fees.
+- Payments received.
+- Outstanding payments.
+- Completed tasks and projects.
+- Total hours worked.
+- Billable hours.
+- Schedules completed.
+- Milestones achieved.
+- New clients acquired.
+- Total expenses.
+- Net cash flow.
+
+Distinguish recognized or invoiced revenue from actual cash received. Do not present all project values as income already earned or collected.
+
+### B. Daily progress
+
+Create a day-by-day view for the selected month.
+
+Display relevant daily activity, including:
+
+- Tasks completed.
+- Work hours.
+- Earnings or payments recorded.
+- Expenses.
+- Schedules completed.
+- Milestones completed.
+
+Allow users to click a date to view its underlying activity.
+
+### C. Six-month performance trends
+
+Provide a six-month comparison showing:
+
+- Monthly gross project value.
+- Net earnings.
+- Payments received.
+- Expenses.
+- Hours worked.
+- Tasks and projects completed.
+- New clients.
+- Goal achievement.
+
+Include readable charts and summary comparisons.
+
+### D. Performance highlights
+
+At the bottom of the overview, provide a concise text-based list of important insights, such as:
+
+- Highest-earning client this month.
+- Most profitable platform based on available fee and cost data.
+- Most productive month.
+- Most tasks completed in a period.
+- Total focused work hours.
+- Goals achieved.
+- Spending category with the highest expenses.
+- Change in income compared with the previous month.
+
+Only generate highlights when sufficient data exists. Explain the comparison period and avoid making unsupported claims.
+
+### E. Export reports
+
+Provide a Generate Report action.
+
+Allow the user to select:
+
+- Report type.
+- Date range.
+- Included modules.
+- Display currency.
+- Export format: Excel (.xlsx) or PDF.
+
+Excel reports should contain structured tables, appropriate column headings, dates, currency values, and useful summary sheets.
+
+PDF reports should have a professional layout with summary statistics, charts where appropriate, and clearly labeled tables.
+
+Exports must use the actual selected filters and saved application data.
+
+## 14. Cross-Page Automation Rules
+
+Implement the following relationships throughout the application.
+
+### Task and project automation
+
+- Creating a task associates it with a selected client and platform.
+- Completing a task updates project and Dashboard statistics.
+- Starting a timer from a task associates the time entry with that project.
+- Completing a project can initiate payout-date tracking when the relevant payout event is confirmed.
+- Recording a payment reduces the client's outstanding balance.
+- Changing a deadline updates relevant alerts.
+
+### Client automation
+
+- A new client created from Tasks, Time Tracker, or Invoices must appear in Contacts.
+- Client details should automatically populate relevant invoice and project forms.
+- All projects, invoices, time entries, and payments must remain linked to the same client record.
+
+### Time and invoice automation
+
+- Tracked time updates project and client totals.
+- Invoicing billable time marks the appropriate time entries as invoiced.
+- Partial invoice payments update the remaining invoice balance.
+- Invoice balances and client balances update automatically.
+- The same billable time cannot be invoiced twice.
+- An invoice can include several projects or time entries when appropriate.
+
+### Earnings automation
+
+- Recorded payments update payment history.
+- Platform fees affect net earnings calculations.
+- Expected payouts remain separate from confirmed payments.
+- Exchange-rate updates affect converted display values without rewriting original transaction values.
+
+### Goal automation
+
+- Completed milestones update goal progress.
+- Actual recorded earnings can contribute to an income goal.
+- Actual tracked hours can contribute to a work-hours goal.
+- Actual recorded savings contributions can contribute to a savings goal.
+
+### Budget automation
+
+- Expenses update category totals and monthly budget progress.
+- Recurring expenses generate future occurrences according to the selected recurrence rules.
+- Subscription reminders are generated from renewal dates.
+- Income and expense reports use the underlying transactions rather than duplicated summary records.
+
+### Dashboard automation
+
+- Dashboard metrics update when relevant records change.
+- Needs Attention appears only when appropriate.
+- Today's tasks, schedules, goals, and deadlines are drawn from their respective modules.
+- Seven-day and monthly statistics use clearly defined date ranges.
+
+## 15. User Experience and Interface Design
+
+Create a polished, premium SaaS interface with a modern productivity-focused aesthetic.
+
+### Design direction
+
+Use a clean, professional layout inspired by high-quality project management and financial SaaS applications.
+
+Recommended characteristics:
+
+- Light background with subtle neutral surfaces.
+- Dark, readable typography.
+- A restrained primary accent color.
+- Green for completed or positive financial outcomes.
+- Amber for upcoming deadlines and warnings.
+- Red for overdue or critical issues.
+- Subtle borders and restrained shadows.
+- Consistent spacing and alignment.
+- Rounded cards used selectively.
+- Readable charts and progress indicators.
+- Clear icons paired with labels where needed.
+
+Avoid excessive gradients, oversized cards, unnecessary animations, decorative charts, and visual clutter.
+
+### Layout
+
+Desktop:
+
+- Persistent collapsible sidebar.
+- Top bar with page title, search, notifications, and profile/settings.
+- Main content area with responsive cards and tables.
+- Clear page hierarchy and consistent page padding.
+
+Mobile:
+
+- Responsive layouts.
+- Compact navigation.
+- Forms optimized for touch.
+- Tables converted into readable cards where appropriate.
+- Timers and quick actions easy to access.
+- No horizontal overflow.
+
+### Interaction design
+
+- Use clear primary and secondary actions.
+- Open forms in suitable modals, drawers, or dedicated pages.
+- Keep forms concise and group related fields.
+- Provide useful empty states with relevant actions.
+- Show success and error feedback.
+- Confirm destructive actions.
+- Preserve user-entered information when validation fails.
+- Add search, filtering, sorting, and pagination to large lists.
+- Support keyboard navigation and accessible labels.
+- Ensure readable color contrast and visible focus states.
+
+Do not overload every page with all possible statistics. Display the most important metrics first and place secondary information in detail views.
+
+## 16. SEO and Content Requirements
+
+Optimize the public-facing product website for relevant search intent while keeping the actual management application private and productivity-focused.
+
+If a public landing page is included, use clear, natural copy focused on phrases such as:
+
+- Freelancer management software.
+- Freelancer productivity tool.
+- Project and task management for freelancers.
+- Freelance time tracking.
+- Client and invoice management.
+- Freelancer earnings tracker.
+- Freelancer budget planner.
+
+Include a clear product title, descriptive page metadata, accessible headings, descriptive links, and appropriate structured data where relevant.
+
+Do not keyword-stuff the application interface.
+
+Private dashboard pages, client information, invoices, and financial records must not be indexed by search engines.
+
+## 17. Technical and Functional Expectations
+
+Build a complete, maintainable application with reusable components and a consistent data model.
+
+Required capabilities include:
+
+- Persistent data storage.
+- Reliable CRUD operations for all major records.
+- Authentication and secure user-specific data isolation if accounts are supported.
+- Database-backed relationships between clients, projects, tasks, invoices, and time entries.
+- Working charts and calculations.
+- PDF invoice generation.
+- Excel and PDF report exports.
+- Currency-rate integration with an appropriate fallback.
+- Reliable timer persistence.
+- Configurable reminders and notification preferences.
+- Date-aware scheduling.
+- Input validation and error handling.
+- Responsive desktop and mobile interfaces.
+- Accessible forms and controls.
+- Clear loading, empty, and error states.
+
+Keep business logic separate from presentation components where practical.
+
+If an external service, API key, database, or notification permission is required, implement the appropriate integration or clearly identify what must be configured. Do not simulate a real integration and claim it is operational.
+
+Use sensible defaults, but allow the user to customize currencies, hourly rates, platform fees, payout assumptions, budget categories, reminders, and billing rules.
+
+## 18. Acceptance Criteria
+
+Before considering the application complete, verify these scenarios:
+
+1. A user creates a client and the client becomes available in every relevant module.
+2. A user creates a Fiverr project worth 100 USDT and the configured 20% fee produces an estimated net value of 80 USDT.
+3. A user records a partial payment and the outstanding client balance updates correctly.
+4. A user starts and stops a timer, navigates away, returns, and still sees the correct recorded duration.
+5. A user manually adds time to a project and the billable amount is calculated correctly.
+6. A user generates an invoice from tracked time without invoicing the same time twice.
+7. A user records a partial invoice payment and the remaining balance updates correctly.
+8. A user completes a task and sees the relevant statistics update on Today and Dashboard.
+9. A user schedules a reminder and receives an alert at the configured time when the required notification mechanism is available.
+10. A task approaching its deadline appears in Needs Attention and disappears from that section when resolved.
+11. A completed project can have its expected platform payout tracked without incorrectly marking the money as received.
+12. A user creates a monthly budget, records an expense, and sees the correct category and remaining budget values.
+13. A recurring subscription produces the appropriate future reminders and stops when cancelled.
+14. A user creates a goal with milestones and sees its progress update correctly.
+15. A user exports a selected month's data to Excel and PDF and receives files containing the correct filtered data.
+16. Dashboard and report totals reconcile with their underlying records and do not double-count invoices, payments, expenses, or time entries.
+17. All major forms, buttons, filters, navigation items, and actions work on desktop and mobile.
+
+## 19. Final Build Instruction
+
+Prioritize correctness, usability, and connected functionality over visual complexity.
+
+Build the application in a logical order:
+
+1. Establish the data model and relationships.
+2. Implement shared navigation and the global application layout.
+3. Build Contacts and project/task management.
+4. Implement time tracking and invoicing.
+5. Implement scheduling, reminders, and goals.
+6. Implement Earnings and Budget.
+7. Build the Dashboard and Today page using real application data.
+8. Build Reports and exports.
+9. Test calculations, cross-page updates, persistence, alerts, and responsive layouts.
+
+The final result should be an intelligent, polished, practical freelancer management platform that helps the user plan each day, complete projects, manage clients, track every billable hour, understand pending payments, monitor earnings, control expenses, and measure long-term progress from one unified system.
+
+Do not stop at a design mockup. Deliver the most complete working implementation supported by the chosen technology stack, and clearly identify any integrations or configuration steps that remain necessary.
