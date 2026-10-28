@@ -60,6 +60,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       badge: overdueCount > 0 ? overdueCount : undefined,
       badgeColor: 'bg-rose-500 text-white',
     },
+    { id: 'time', label: 'Time Tracker', icon: Timer },
     { id: 'contacts', label: 'Clients', icon: Users },
     { id: 'earnings', label: 'Earnings', icon: DollarSign },
     { id: 'goals', label: 'Goals', icon: Target },
