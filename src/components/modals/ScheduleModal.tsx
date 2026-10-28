@@ -2,18 +2,22 @@ import React, { useState } from 'react';
 import { X, Calendar, Clock, Bell, Repeat } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
+import { ScheduleItem } from '../../types';
+
 interface ScheduleModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialDate?: string;
+  itemToEdit?: ScheduleItem | null;
 }
 
 export const ScheduleModal: React.FC<ScheduleModalProps> = ({
   isOpen,
   onClose,
   initialDate,
+  itemToEdit,
 }) => {
-  const { addSchedule } = useApp();
+  const { addSchedule, updateSchedule } = useApp();
 
   const [title, setTitle] = useState('');
   const [date, setDate] = useState(initialDate || new Date().toISOString().split('T')[0]);
@@ -25,23 +29,61 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({
   const [advanceReminderMinutes, setAdvanceReminderMinutes] = useState(15);
   const [repeatSetting, setRepeatSetting] = useState<'none' | 'daily' | 'weekly' | 'monthly'>('none');
 
+  React.useEffect(() => {
+    if (itemToEdit) {
+      setTitle(itemToEdit.title || '');
+      setDate(itemToEdit.date || new Date().toISOString().split('T')[0]);
+      setStartTime(itemToEdit.startTime || '11:00');
+      setEndTime(itemToEdit.endTime || '');
+      setType(itemToEdit.type || 'activity');
+      setNotes(itemToEdit.notes || '');
+      setAlertAtTime(itemToEdit.alertAtTime ?? true);
+      setAdvanceReminderMinutes(itemToEdit.advanceReminderMinutes ?? 15);
+      setRepeatSetting(itemToEdit.repeatSetting || 'none');
+    } else {
+      setTitle('');
+      setDate(initialDate || new Date().toISOString().split('T')[0]);
+      setStartTime('11:00');
+      setEndTime('11:45');
+      setType('activity');
+      setNotes('');
+      setAlertAtTime(true);
+      setAdvanceReminderMinutes(15);
+      setRepeatSetting('none');
+    }
+  }, [itemToEdit, initialDate, isOpen]);
+
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
 
-    addSchedule({
-      title: title.trim(),
-      date,
-      startTime,
-      endTime: endTime || undefined,
-      type,
-      notes: notes.trim(),
-      alertAtTime,
-      advanceReminderMinutes,
-      repeatSetting,
-    });
+    if (itemToEdit) {
+      updateSchedule(itemToEdit.id, {
+        title: title.trim(),
+        date,
+        startTime,
+        endTime: endTime || undefined,
+        type,
+        notes: notes.trim(),
+        alertAtTime,
+        advanceReminderMinutes,
+        repeatSetting,
+      });
+    } else {
+      addSchedule({
+        title: title.trim(),
+        date,
+        startTime,
+        endTime: endTime || undefined,
+        type,
+        notes: notes.trim(),
+        alertAtTime,
+        advanceReminderMinutes,
+        repeatSetting,
+      });
+    }
 
     onClose();
   };

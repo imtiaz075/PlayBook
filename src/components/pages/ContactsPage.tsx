@@ -20,6 +20,7 @@ import { useApp } from '../../context/AppContext';
 import { Client, ClientStatus } from '../../types';
 import { formatCurrency } from '../../services/currency';
 import { InfoTooltip } from '../common/Tooltip';
+import { ContactModal } from '../modals/ContactModal';
 
 interface ContactsPageProps {
   onOpenNewContact: () => void;
@@ -37,6 +38,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
   const [statusTab, setStatusTab] = useState<'active' | 'archived' | 'all'>('active');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [editingClient, setEditingClient] = useState<Client | null>(null);
 
   // Client filtering
   const filteredClients = clients.filter((c) => {
@@ -304,6 +306,13 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
 
                   <div className="flex items-center gap-1.5">
                     <button
+                      onClick={() => setEditingClient(client)}
+                      className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-md transition-colors"
+                      title="Edit client profile"
+                    >
+                      <Edit size={13} />
+                    </button>
+                    <button
                       onClick={() => onOpenNewTaskWithClient(client)}
                       className="px-2.5 py-1 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors"
                       title="Add task for this client"
@@ -328,6 +337,15 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
           })
         )}
       </div>
+
+      {/* Edit Client Modal */}
+      {editingClient && (
+        <ContactModal
+          isOpen={!!editingClient}
+          onClose={() => setEditingClient(null)}
+          editingClient={editingClient}
+        />
+      )}
     </div>
   );
 };

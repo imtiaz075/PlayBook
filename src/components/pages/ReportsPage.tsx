@@ -32,11 +32,14 @@ export const ReportsPage: React.FC = () => {
     displayCurrency,
     ratesData,
     settings,
+    workdayHistory,
+    workdayState,
   } = useApp();
 
   const [selectedMonth, setSelectedMonth] = useState<string>(
     new Date().toISOString().substring(0, 7) // YYYY-MM
   );
+  const [reportTab, setReportTab] = useState<'financial' | 'personal_hours'>('financial');
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [selectedDateDrilldown, setSelectedDateDrilldown] = useState<string | null>(null);
 
@@ -173,6 +176,75 @@ export const ReportsPage: React.FC = () => {
     }
     return list;
   }, [payments, expenses, tasks, timeEntries, displayCurrency, ratesData.rates]);
+
+  // 3b. Monthly Personal Working Hours Calculations (Built strictly from personal work sessions in workdayHistory)
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  const personalDaysInMonth = useMemo(() => {
+    const [year, month] = selectedMonth.split('-').map(Number);
+    const dateCount = new Date(year, month, 0).getDate();
+
+    return Array.from({ length: dateCount }, (_, i) => {
+      const dayNum = i + 1;
+      const dayStr = `${selectedMonth}-${String(dayNum).padStart(2, '0')}`;
+
+      const historyEntries = workdayHistory.filter((wh) => wh.date === dayStr);
+      let activeSecs = historyEntries.reduce((s, wh) => s + wh.activeWorkSeconds, 0);
+      let breakSecs = historyEntries.reduce((s, wh) => s + wh.totalBreakSeconds, 0);
+      let sessions = historyEntries.reduce((s, wh) => s + (wh.sessionsCount || 1), 0);
+
+      if (dayStr === todayStr) {
+        if (workdayState.status === 'working' && workdayState.currentIntervalStartTime) {
+          activeSecs += workdayState.accumulatedWorkSeconds + Math.max(0, Math.floor((Date.now() - workdayState.currentIntervalStartTime) / 1000));
+          sessions = Math.max(sessions, workdayState.workSessionsCount || 1);
+        } else if (workdayState.status === 'on_break' && workdayState.currentBreakStartTime) {
+          activeSecs += workdayState.accumulatedWorkSeconds;
+          breakSecs += workdayState.accumulatedBreakSeconds + Math.max(0, Math.floor((Date.now() - workdayState.currentBreakStartTime) / 1000));
+          sessions = Math.max(sessions, workdayState.workSessionsCount || 1);
+        } else if (workdayState.status !== 'completed' && workdayState.status !== 'idle') {
+          activeSecs += workdayState.accumulatedWorkSeconds;
+          breakSecs += workdayState.accumulatedBreakSeconds;
+        }
+      }
+
+      return {
+        date: dayStr,
+        dayNum,
+        activeWorkHours: Number((activeSecs / 3600).toFixed(1)),
+        activeWorkSeconds: activeSecs,
+        breakHours: Number((breakSecs / 3600).toFixed(1)),
+        breakSeconds: breakSecs,
+        sessionsCount: sessions,
+        hasActivity: activeSecs > 0 || breakSecs > 0,
+      };
+    });
+  }, [selectedMonth, workdayHistory, workdayState, todayStr]);
+
+  const personalWorkSummary = useMemo(() => {
+    const totalActiveSecs = personalDaysInMonth.reduce((s, d) => s + d.activeWorkSeconds, 0);
+    const totalBreakSecs = personalDaysInMonth.reduce((s, d) => s + d.breakSeconds, 0);
+    const totalSessions = personalDaysInMonth.reduce((s, d) => s + d.sessionsCount, 0);
+    const daysWorkedCount = personalDaysInMonth.filter((d) => d.activeWorkSeconds > 0).length;
+
+    const avgHoursPerWorkDay = daysWorkedCount > 0 ? (totalActiveSecs / 3600 / daysWorkedCount).toFixed(1) : '0';
+
+    let peakDay = personalDaysInMonth[0];
+    personalDaysInMonth.forEach((d) => {
+      if (d.activeWorkSeconds > (peakDay?.activeWorkSeconds || 0)) {
+        peakDay = d;
+      }
+    });
+
+    return {
+      totalHours: Number((totalActiveSecs / 3600).toFixed(1)),
+      totalBreakHours: Number((totalBreakSecs / 3600).toFixed(1)),
+      totalSessions,
+      daysWorkedCount,
+      avgHoursPerWorkDay: Number(avgHoursPerWorkDay),
+      peakDayDate: peakDay && peakDay.activeWorkSeconds > 0 ? peakDay.date : 'N/A',
+      peakDayHours: peakDay && peakDay.activeWorkSeconds > 0 ? peakDay.activeWorkHours : 0,
+    };
+  }, [personalDaysInMonth]);
 
   // 4. Performance Highlights & Data Insights
   const highestEarningClient = useMemo(() => {
@@ -344,216 +416,420 @@ export const ReportsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* A. Monthly Overview Grid */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-6 space-y-4 transition-all duration-200 hover:shadow-md hover:border-slate-300">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-          <div>
-            <h2 className="text-sm font-bold text-slate-900">
-              Executive Reconciliation for {selectedMonth}
-            </h2>
-          </div>
-          <span className="text-xs font-mono font-bold bg-slate-100 px-2 py-1 rounded-md text-slate-700">
-            Base: {displayCurrency}
-          </span>
-        </div>
+      {/* Tab Switcher */}
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-1">
+        <button
+          onClick={() => setReportTab('financial')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-lg transition-all ${
+            reportTab === 'financial'
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <FileBarChart size={15} />
+          <span>Financial & Business Performance</span>
+        </button>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          <div className="p-3 bg-slate-50 rounded-lg">
-            <span className="text-[11px] text-slate-500 block">Gross Contracts</span>
-            <p className="text-base font-bold text-slate-900 font-mono tabular-nums mt-0.5 truncate">
-              {formatCurrency(monthGrossValue, displayCurrency)}
-            </p>
-            <span className="text-[10px] text-slate-400">total agreed</span>
-          </div>
-
-          <div className="p-3 bg-slate-50 rounded-lg">
-            <span className="text-[11px] text-slate-500 block">Net After Fees</span>
-            <p className="text-base font-bold text-slate-900 font-mono tabular-nums mt-0.5 truncate">
-              {formatCurrency(monthNetEarnings, displayCurrency)}
-            </p>
-            <span className="text-[10px] text-slate-400">deductions removed</span>
-          </div>
-
-          <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-100">
-            <span className="text-[11px] text-emerald-700 font-semibold block">Cash Deposited</span>
-            <p className="text-base font-bold text-emerald-700 font-mono tabular-nums mt-0.5 truncate">
-              {formatCurrency(monthCashReceived, displayCurrency)}
-            </p>
-            <span className="text-[10px] text-emerald-600">actual received</span>
-          </div>
-
-          <div className="p-3 bg-rose-50 rounded-lg border border-rose-100">
-            <span className="text-[11px] text-rose-700 font-semibold block">Total Expenses</span>
-            <p className="text-base font-bold text-rose-700 font-mono tabular-nums mt-0.5 truncate">
-              {formatCurrency(monthTotalExpenses, displayCurrency)}
-            </p>
-            <span className="text-[10px] text-rose-600">spent in month</span>
-          </div>
-
-          <div className="p-3 bg-indigo-50 rounded-lg border border-indigo-100">
-            <span className="text-[11px] text-indigo-700 font-semibold block">Net Cash Flow</span>
-            <p
-              className={`text-base font-bold font-mono tabular-nums mt-0.5 truncate ${
-                monthNetCashFlow >= 0 ? 'text-indigo-700' : 'text-rose-700'
-              }`}
-            >
-              {formatCurrency(monthNetCashFlow, displayCurrency)}
-            </p>
-            <span className="text-[10px] text-indigo-600">cash minus expenses</span>
-          </div>
-
-          <div className="p-3 bg-slate-50 rounded-lg">
-            <span className="text-[11px] text-slate-500 block">Billable Hours</span>
-            <p className="text-base font-bold text-slate-900 font-mono tabular-nums mt-0.5">
-              {(monthBillableSeconds / 3600).toFixed(1)} hrs
-            </p>
-            <span className="text-[10px] text-slate-400">tracked time</span>
-          </div>
-        </div>
+        <button
+          onClick={() => setReportTab('personal_hours')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-lg transition-all ${
+            reportTab === 'personal_hours'
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <Clock size={15} />
+          <span>Monthly Personal Working Hours</span>
+        </button>
       </div>
 
-      {/* D. Data-Driven Performance Highlights */}
-      <div className="p-5 bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-xl shadow-xs border border-slate-800">
-        <div className="flex items-center gap-2 text-indigo-300 text-xs font-semibold mb-3">
-          <Sparkles size={14} className="text-amber-400" />
-          <span>Automated Performance Highlights & Intelligence</span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
-          <div className="p-3 bg-white/10 rounded-lg border border-white/10">
-            <span className="text-slate-400 block text-[11px]">Highest-Earning Client</span>
-            <p className="text-sm font-bold text-white mt-1">
-              {highestEarningClient ? highestEarningClient.name : 'N/A'}
-            </p>
-            <span className="text-emerald-400 font-mono tabular-nums">
-              {highestEarningClient ? formatCurrency(highestEarningClient.amount, 'USD') : '$0'}
-            </span>
-          </div>
-
-          <div className="p-3 bg-white/10 rounded-lg border border-white/10">
-            <span className="text-slate-400 block text-[11px]">Most Profitable Platform</span>
-            <p className="text-sm font-bold text-white mt-1">
-              {mostProfitablePlatform ? mostProfitablePlatform.platform : 'Direct Work'}
-            </p>
-            <span className="text-indigo-300 font-mono tabular-nums">
-              {mostProfitablePlatform ? formatCurrency(mostProfitablePlatform.net, 'USD') : '$0'} net
-            </span>
-          </div>
-
-          <div className="p-3 bg-white/10 rounded-lg border border-white/10">
-            <span className="text-slate-400 block text-[11px]">Highest Expense Category</span>
-            <p className="text-sm font-bold text-white mt-1 truncate">
-              {topExpenseCategory ? topExpenseCategory.category : 'Operations'}
-            </p>
-            <span className="text-rose-300 font-mono tabular-nums">
-              {topExpenseCategory ? formatCurrency(topExpenseCategory.amount, 'USD') : '$0'}
-            </span>
-          </div>
-
-          <div className="p-3 bg-white/10 rounded-lg border border-white/10">
-            <span className="text-slate-400 block text-[11px]">Client Acquisition</span>
-            <p className="text-sm font-bold text-white mt-1">{monthNewClients} new clients</p>
-            <span className="text-slate-300">onboarded in {selectedMonth}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* C. Six-Month Performance Trend Visuals */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-6 space-y-4 transition-all duration-200 hover:shadow-md hover:border-slate-300">
-        <div>
-          <h3 className="text-sm font-bold text-slate-900">Six-Month Performance Trends</h3>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
-          {sixMonthsTrends.map((m) => (
-            <div key={m.prefix} className="p-3 bg-slate-50 rounded-lg border border-slate-200/70 text-center transition-all duration-150 hover:border-slate-300 hover:shadow-xs">
-              <span className="text-xs font-bold text-slate-800 block">{m.label}</span>
-              <div className="my-2 space-y-1">
-                <div className="text-xs font-bold font-mono text-emerald-600 truncate">
-                  +{formatCurrency(m.income, displayCurrency)}
-                </div>
-                <div className="text-[11px] font-mono text-rose-600 truncate">
-                  -{formatCurrency(m.exp, displayCurrency)}
-                </div>
+      {reportTab === 'financial' ? (
+        <>
+          {/* A. Monthly Overview Grid */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-6 space-y-4 transition-all duration-200 hover:shadow-md hover:border-slate-300">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900">
+                  Executive Reconciliation for {selectedMonth}
+                </h2>
               </div>
-              <div className="text-[10px] text-slate-500 border-t border-slate-200 pt-1">
-                {m.delivered} done · {m.hours}h
+              <span className="text-xs font-mono font-bold bg-slate-100 px-2 py-1 rounded-md text-slate-700">
+                Base: {displayCurrency}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <span className="text-[11px] text-slate-500 block">Gross Contracts</span>
+                <p className="text-base font-bold text-slate-900 font-mono tabular-nums mt-0.5 truncate">
+                  {formatCurrency(monthGrossValue, displayCurrency)}
+                </p>
+                <span className="text-[10px] text-slate-400">total agreed</span>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <span className="text-[11px] text-slate-500 block">Net After Fees</span>
+                <p className="text-base font-bold text-slate-900 font-mono tabular-nums mt-0.5 truncate">
+                  {formatCurrency(monthNetEarnings, displayCurrency)}
+                </p>
+                <span className="text-[10px] text-slate-400">deductions removed</span>
+              </div>
+
+              <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-100">
+                <span className="text-[11px] text-emerald-700 font-semibold block">Cash Deposited</span>
+                <p className="text-base font-bold text-emerald-700 font-mono tabular-nums mt-0.5 truncate">
+                  {formatCurrency(monthCashReceived, displayCurrency)}
+                </p>
+                <span className="text-[10px] text-emerald-600">actual received</span>
+              </div>
+
+              <div className="p-3 bg-rose-50 rounded-lg border border-rose-100">
+                <span className="text-[11px] text-rose-700 font-semibold block">Total Expenses</span>
+                <p className="text-base font-bold text-rose-700 font-mono tabular-nums mt-0.5 truncate">
+                  {formatCurrency(monthTotalExpenses, displayCurrency)}
+                </p>
+                <span className="text-[10px] text-rose-600">spent in month</span>
+              </div>
+
+              <div className="p-3 bg-indigo-50 rounded-lg border border-indigo-100">
+                <span className="text-[11px] text-indigo-700 font-semibold block">Net Cash Flow</span>
+                <p
+                  className={`text-base font-bold font-mono tabular-nums mt-0.5 truncate ${
+                    monthNetCashFlow >= 0 ? 'text-indigo-700' : 'text-rose-700'
+                  }`}
+                >
+                  {formatCurrency(monthNetCashFlow, displayCurrency)}
+                </p>
+                <span className="text-[10px] text-indigo-600">cash minus expenses</span>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <span className="text-[11px] text-slate-500 block">Billable Hours</span>
+                <p className="text-base font-bold text-slate-900 font-mono tabular-nums mt-0.5">
+                  {(monthBillableSeconds / 3600).toFixed(1)} hrs
+                </p>
+                <span className="text-[10px] text-slate-400">tracked time</span>
               </div>
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* B. Day-by-Day Activity for Selected Month */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden transition-all duration-200 hover:shadow-md hover:border-slate-300">
-        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-bold text-slate-900">
-              Day-by-Day Activity Log ({selectedMonth})
-            </h3>
           </div>
-        </div>
 
-        <div className="overflow-x-auto max-h-96">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 sticky top-0 border-b border-slate-200 text-slate-600 font-semibold uppercase text-[10px]">
-              <tr>
-                <th className="py-2.5 px-4">Date</th>
-                <th className="py-2.5 px-4 text-center">Tasks Delivered</th>
-                <th className="py-2.5 px-4 text-center">Tracked Hours</th>
-                <th className="py-2.5 px-4 text-right">Cash Received</th>
-                <th className="py-2.5 px-4 text-right">Expenses</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {daysInMonth.map((day) => {
-                const hasActivity =
-                  day.dayDoneTasks > 0 || day.dayHours > 0 || day.dayIncome > 0 || day.dayExp > 0;
-                return (
-                  <tr
-                    key={day.date}
-                    className={`hover:bg-slate-50/70 transition-colors ${
-                      hasActivity ? 'bg-white' : 'bg-slate-50/30 opacity-60'
-                    }`}
-                  >
-                    <td className="py-2.5 px-4 font-mono font-semibold text-slate-700">
-                      {day.date}
-                    </td>
-                    <td className="py-2.5 px-4 text-center font-mono tabular-nums">
-                      {day.dayDoneTasks > 0 ? (
-                        <span className="font-bold text-emerald-600">+{day.dayDoneTasks}</span>
-                      ) : (
-                        '-'
-                      )}
-                    </td>
-                    <td className="py-2.5 px-4 text-center font-mono tabular-nums">
-                      {day.dayHours > 0 ? `${day.dayHours}h` : '-'}
-                    </td>
-                    <td className="py-2.5 px-4 text-right font-mono tabular-nums">
-                      {day.dayIncome > 0 ? (
-                        <span className="font-bold text-emerald-600">
-                          +{formatCurrency(day.dayIncome, displayCurrency)}
-                        </span>
-                      ) : (
-                        '-'
-                      )}
-                    </td>
-                    <td className="py-2.5 px-4 text-right font-mono tabular-nums">
-                      {day.dayExp > 0 ? (
-                        <span className="text-rose-600">
-                          -{formatCurrency(day.dayExp, displayCurrency)}
-                        </span>
-                      ) : (
-                        '-'
-                      )}
-                    </td>
+          {/* D. Data-Driven Performance Highlights */}
+          <div className="p-5 bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-xl shadow-xs border border-slate-800">
+            <div className="flex items-center gap-2 text-indigo-300 text-xs font-semibold mb-3">
+              <Sparkles size={14} className="text-amber-400" />
+              <span>Automated Performance Highlights & Intelligence</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+              <div className="p-3 bg-white/10 rounded-lg border border-white/10">
+                <span className="text-slate-400 block text-[11px]">Highest-Earning Client</span>
+                <p className="text-sm font-bold text-white mt-1">
+                  {highestEarningClient ? highestEarningClient.name : 'N/A'}
+                </p>
+                <span className="text-emerald-400 font-mono tabular-nums">
+                  {highestEarningClient ? formatCurrency(highestEarningClient.amount, 'USD') : '$0'}
+                </span>
+              </div>
+
+              <div className="p-3 bg-white/10 rounded-lg border border-white/10">
+                <span className="text-slate-400 block text-[11px]">Most Profitable Platform</span>
+                <p className="text-sm font-bold text-white mt-1">
+                  {mostProfitablePlatform ? mostProfitablePlatform.platform : 'Direct Work'}
+                </p>
+                <span className="text-indigo-300 font-mono tabular-nums">
+                  {mostProfitablePlatform ? formatCurrency(mostProfitablePlatform.net, 'USD') : '$0'} net
+                </span>
+              </div>
+
+              <div className="p-3 bg-white/10 rounded-lg border border-white/10">
+                <span className="text-slate-400 block text-[11px]">Highest Expense Category</span>
+                <p className="text-sm font-bold text-white mt-1 truncate">
+                  {topExpenseCategory ? topExpenseCategory.category : 'Operations'}
+                </p>
+                <span className="text-rose-300 font-mono tabular-nums">
+                  {topExpenseCategory ? formatCurrency(topExpenseCategory.amount, 'USD') : '$0'}
+                </span>
+              </div>
+
+              <div className="p-3 bg-white/10 rounded-lg border border-white/10">
+                <span className="text-slate-400 block text-[11px]">Client Acquisition</span>
+                <p className="text-sm font-bold text-white mt-1">{monthNewClients} new clients</p>
+                <span className="text-slate-300">onboarded in {selectedMonth}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* C. Six-Month Performance Trend Visuals */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-6 space-y-4 transition-all duration-200 hover:shadow-md hover:border-slate-300">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Six-Month Performance Trends</h3>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
+              {sixMonthsTrends.map((m) => (
+                <div key={m.prefix} className="p-3 bg-slate-50 rounded-lg border border-slate-200/70 text-center transition-all duration-150 hover:border-slate-300 hover:shadow-xs">
+                  <span className="text-xs font-bold text-slate-800 block">{m.label}</span>
+                  <div className="my-2 space-y-1">
+                    <div className="text-xs font-bold font-mono text-emerald-600 truncate">
+                      +{formatCurrency(m.income, displayCurrency)}
+                    </div>
+                    <div className="text-[11px] font-mono text-rose-600 truncate">
+                      -{formatCurrency(m.exp, displayCurrency)}
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-slate-500 border-t border-slate-200 pt-1">
+                    {m.delivered} done · {m.hours}h
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* B. Day-by-Day Activity for Selected Month */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden transition-all duration-200 hover:shadow-md hover:border-slate-300">
+            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Day-by-Day Activity Log ({selectedMonth})
+                </h3>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto max-h-96">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 sticky top-0 border-b border-slate-200 text-slate-600 font-semibold uppercase text-[10px]">
+                  <tr>
+                    <th className="py-2.5 px-4">Date</th>
+                    <th className="py-2.5 px-4 text-center">Tasks Delivered</th>
+                    <th className="py-2.5 px-4 text-center">Tracked Hours</th>
+                    <th className="py-2.5 px-4 text-right">Cash Received</th>
+                    <th className="py-2.5 px-4 text-right">Expenses</th>
                   </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {daysInMonth.map((day) => {
+                    const hasActivity =
+                      day.dayDoneTasks > 0 || day.dayHours > 0 || day.dayIncome > 0 || day.dayExp > 0;
+                    return (
+                      <tr
+                        key={day.date}
+                        className={`hover:bg-slate-50/70 transition-colors ${
+                          hasActivity ? 'bg-white' : 'bg-slate-50/30 opacity-60'
+                        }`}
+                      >
+                        <td className="py-2.5 px-4 font-mono font-semibold text-slate-700">
+                          {day.date}
+                        </td>
+                        <td className="py-2.5 px-4 text-center font-mono tabular-nums">
+                          {day.dayDoneTasks > 0 ? (
+                            <span className="font-bold text-emerald-600">+{day.dayDoneTasks}</span>
+                          ) : (
+                            '-'
+                          )}
+                        </td>
+                        <td className="py-2.5 px-4 text-center font-mono tabular-nums">
+                          {day.dayHours > 0 ? `${day.dayHours}h` : '-'}
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono tabular-nums">
+                          {day.dayIncome > 0 ? (
+                            <span className="font-bold text-emerald-600">
+                              +{formatCurrency(day.dayIncome, displayCurrency)}
+                            </span>
+                          ) : (
+                            '-'
+                          )}
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono tabular-nums">
+                          {day.dayExp > 0 ? (
+                            <span className="text-rose-600">
+                              -{formatCurrency(day.dayExp, displayCurrency)}
+                            </span>
+                          ) : (
+                            '-'
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      ) : (
+        /* DEDICATED MONTHLY PERSONAL WORKING HOURS REPORT TAB */
+        <div className="space-y-6">
+          {/* Summary KPIs */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs">
+              <span className="text-xs text-slate-500 font-medium">Total Personal Working Hours</span>
+              <p className="text-2xl font-bold text-indigo-600 font-mono tabular-nums mt-1">
+                {personalWorkSummary.totalHours} hrs
+              </p>
+              <span className="text-[10px] text-slate-400">in {selectedMonth}</span>
+            </div>
+
+            <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs">
+              <span className="text-xs text-slate-500 font-medium">Days Worked</span>
+              <p className="text-2xl font-bold text-slate-900 font-mono tabular-nums mt-1">
+                {personalWorkSummary.daysWorkedCount} days
+              </p>
+              <span className="text-[10px] text-slate-400">with active work</span>
+            </div>
+
+            <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs">
+              <span className="text-xs text-slate-500 font-medium font-medium">Avg Working Hours / Day</span>
+              <p className="text-2xl font-bold text-slate-900 font-mono tabular-nums mt-1">
+                {personalWorkSummary.avgHoursPerWorkDay} hrs
+              </p>
+              <span className="text-[10px] text-slate-400">per work session day</span>
+            </div>
+
+            <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs">
+              <span className="text-xs text-slate-500 font-medium">Work Sessions Count</span>
+              <p className="text-2xl font-bold text-slate-900 font-mono tabular-nums mt-1">
+                {personalWorkSummary.totalSessions}
+              </p>
+              <span className="text-[10px] text-slate-400">total focus intervals</span>
+            </div>
+
+            <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs">
+              <span className="text-xs text-slate-500 font-medium">Total Break Time</span>
+              <p className="text-2xl font-bold text-amber-600 font-mono tabular-nums mt-1">
+                {personalWorkSummary.totalBreakHours} hrs
+              </p>
+              <span className="text-[10px] text-slate-400">rest & recovery</span>
+            </div>
+
+            <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs">
+              <span className="text-xs text-emerald-600 font-semibold">Peak Working Day</span>
+              <p className="text-lg font-bold text-slate-900 font-mono tabular-nums mt-1 truncate">
+                {personalWorkSummary.peakDayDate}
+              </p>
+              <span className="text-[10px] text-emerald-600 font-bold font-mono">
+                {personalWorkSummary.peakDayHours} hrs worked
+              </span>
+            </div>
+          </div>
+
+          {/* Daily Personal Working Hours Bar Chart Visual */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Daily Personal Working Hours Visual</h3>
+                <p className="text-xs text-slate-500">Personal workday timer sessions across {selectedMonth}</p>
+              </div>
+              <Clock size={16} className="text-indigo-600" />
+            </div>
+
+            <div className="h-36 flex items-end justify-between gap-1 pt-4 overflow-x-auto">
+              {personalDaysInMonth.map((day) => {
+                const maxVal = Math.max(...personalDaysInMonth.map((d) => d.activeWorkHours), 8);
+                const heightPct = Math.max(4, Math.round((day.activeWorkHours / maxVal) * 100));
+                const isToday = day.date === todayStr;
+
+                return (
+                  <div key={day.date} className="flex-1 min-w-[20px] flex flex-col items-center gap-1 group">
+                    <span className="text-[9px] font-mono tabular-nums font-semibold text-slate-500 group-hover:text-indigo-600">
+                      {day.activeWorkHours > 0 ? `${day.activeWorkHours}h` : ''}
+                    </span>
+                    <div className="w-full bg-slate-100 rounded-t h-24 flex items-end">
+                      <div
+                        style={{ height: `${heightPct}%` }}
+                        className={`w-full rounded-t transition-all ${
+                          isToday
+                            ? 'bg-indigo-600'
+                            : day.activeWorkHours > 0
+                            ? 'bg-slate-700 hover:bg-indigo-500'
+                            : 'bg-transparent'
+                        }`}
+                        title={`${day.date}: ${day.activeWorkHours} hrs active work, ${day.breakHours} hrs break`}
+                      />
+                    </div>
+                    <span className={`text-[9px] font-mono ${isToday ? 'text-indigo-600 font-bold' : 'text-slate-400'}`}>
+                      {day.dayNum}
+                    </span>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
+            </div>
+          </div>
+
+          {/* Day-by-Day Personal Work Sessions Table */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Day-by-Day Personal Work Session Log ({selectedMonth})
+                </h3>
+                <p className="text-xs text-slate-500">Excludes client-billing sessions for pure personal productivity analysis</p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto max-h-96">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 sticky top-0 border-b border-slate-200 text-slate-600 font-semibold uppercase text-[10px]">
+                  <tr>
+                    <th className="py-2.5 px-4">Date</th>
+                    <th className="py-2.5 px-4 text-center">Active Work Hours</th>
+                    <th className="py-2.5 px-4 text-center">Break Time</th>
+                    <th className="py-2.5 px-4 text-center">Work Sessions</th>
+                    <th className="py-2.5 px-4 text-right">Day Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {personalDaysInMonth.map((day) => {
+                    const isToday = day.date === todayStr;
+                    return (
+                      <tr
+                        key={day.date}
+                        className={`hover:bg-slate-50/70 transition-colors ${
+                          day.hasActivity ? 'bg-white' : 'bg-slate-50/30 opacity-60'
+                        }`}
+                      >
+                        <td className="py-2.5 px-4 font-mono font-semibold text-slate-700 flex items-center gap-2">
+                          <span>{day.date}</span>
+                          {isToday && (
+                            <span className="px-1.5 py-0.2 bg-indigo-100 text-indigo-700 rounded text-[9px] font-bold">
+                              TODAY
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-4 text-center font-mono tabular-nums">
+                          {day.activeWorkHours > 0 ? (
+                            <span className="font-bold text-indigo-600">{day.activeWorkHours} hrs</span>
+                          ) : (
+                            <span className="text-slate-300">-</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-4 text-center font-mono tabular-nums">
+                          {day.breakHours > 0 ? (
+                            <span className="text-amber-600">{day.breakHours} hrs</span>
+                          ) : (
+                            <span className="text-slate-300">-</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-4 text-center font-mono tabular-nums">
+                          {day.sessionsCount > 0 && day.activeWorkHours > 0 ? day.sessionsCount : '-'}
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono tabular-nums">
+                          {day.activeWorkHours >= 4 ? (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">Full Workday</span>
+                          ) : day.activeWorkHours > 0 ? (
+                            <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">Partial Workday</span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400">Rest Day</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

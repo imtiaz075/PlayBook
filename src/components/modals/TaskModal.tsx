@@ -1,20 +1,22 @@
 import React, { useState } from 'react';
 import { X, CheckSquare, Plus, DollarSign, Percent, AlertCircle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { Priority, PlatformType, TaskStatus } from '../../types';
+import { Priority, PlatformType, TaskStatus, Task } from '../../types';
 
 interface TaskModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialClientId?: string;
+  taskToEdit?: Task | null;
 }
 
 export const TaskModal: React.FC<TaskModalProps> = ({
   isOpen,
   onClose,
   initialClientId,
+  taskToEdit,
 }) => {
-  const { clients, addTask, addClient, settings } = useApp();
+  const { clients, addTask, updateTask, addClient, settings } = useApp();
 
   const [name, setName] = useState('');
   const [clientId, setClientId] = useState(initialClientId || clients[0]?.id || '');
@@ -37,6 +39,40 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [showNewClientForm, setShowNewClientForm] = useState(false);
   const [newClientName, setNewClientName] = useState('');
   const [newClientEmail, setNewClientEmail] = useState('');
+
+  React.useEffect(() => {
+    if (taskToEdit) {
+      setName(taskToEdit.name || '');
+      setClientId(taskToEdit.clientId || (clients[0]?.id || ''));
+      setPlatform((taskToEdit.platform as PlatformType) || 'Fiverr');
+      setDeadline(taskToEdit.deadline || new Date().toISOString().split('T')[0]);
+      setStartDate(taskToEdit.startDate || new Date().toISOString().split('T')[0]);
+      setPriority(taskToEdit.priority || 'medium');
+      setStatus(taskToEdit.status || 'open');
+      setPriceType(taskToEdit.priceType || 'fixed');
+      setProjectPrice(String(taskToEdit.projectPrice ?? 100));
+      setCurrency(taskToEdit.currency || 'USDT');
+      setHourlyRate(String(taskToEdit.hourlyRate ?? 50));
+      setEstimatedHours(String(taskToEdit.estimatedHours ?? 10));
+      setNotes(taskToEdit.notes || '');
+      setDeadlineAlertEnabled(taskToEdit.deadlineAlertEnabled ?? true);
+    } else {
+      setName('');
+      setClientId(initialClientId || clients[0]?.id || '');
+      setPlatform('Fiverr');
+      setDeadline(new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0]);
+      setStartDate(new Date().toISOString().split('T')[0]);
+      setPriority('medium');
+      setStatus('open');
+      setPriceType('fixed');
+      setProjectPrice('100');
+      setCurrency('USDT');
+      setHourlyRate('50');
+      setEstimatedHours('10');
+      setNotes('');
+      setDeadlineAlertEnabled(true);
+    }
+  }, [taskToEdit, initialClientId, isOpen, clients]);
 
   if (!isOpen) return null;
 
@@ -72,24 +108,45 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
     const selectedClient = clients.find((c) => c.id === clientId);
 
-    addTask({
-      name: name.trim(),
-      clientId: clientId || clients[0]?.id || 'c-default',
-      clientName: selectedClient?.fullName || 'General Client',
-      platform,
-      deadline,
-      startDate,
-      priority,
-      status,
-      priceType,
-      projectPrice: priceNum,
-      currency,
-      hourlyRate: Number(hourlyRate) || undefined,
-      estimatedHours: Number(estimatedHours) || undefined,
-      notes: notes.trim(),
-      deadlineAlertEnabled,
-      platformFeePercentage: currentFeePct,
-    });
+    if (taskToEdit) {
+      updateTask(taskToEdit.id, {
+        name: name.trim(),
+        clientId: clientId || clients[0]?.id || 'c-default',
+        clientName: selectedClient?.fullName || 'General Client',
+        platform,
+        deadline,
+        startDate,
+        priority,
+        status,
+        priceType,
+        projectPrice: priceNum,
+        currency,
+        hourlyRate: Number(hourlyRate) || undefined,
+        estimatedHours: Number(estimatedHours) || undefined,
+        notes: notes.trim(),
+        deadlineAlertEnabled,
+        platformFeePercentage: currentFeePct,
+      });
+    } else {
+      addTask({
+        name: name.trim(),
+        clientId: clientId || clients[0]?.id || 'c-default',
+        clientName: selectedClient?.fullName || 'General Client',
+        platform,
+        deadline,
+        startDate,
+        priority,
+        status,
+        priceType,
+        projectPrice: priceNum,
+        currency,
+        hourlyRate: Number(hourlyRate) || undefined,
+        estimatedHours: Number(estimatedHours) || undefined,
+        notes: notes.trim(),
+        deadlineAlertEnabled,
+        platformFeePercentage: currentFeePct,
+      });
+    }
 
     onClose();
   };
@@ -100,7 +157,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
           <div className="flex items-center gap-2">
             <CheckSquare size={18} className="text-indigo-600" />
-            <h2 className="text-base font-bold text-slate-900">Add Project or Task</h2>
+            <h2 className="text-base font-bold text-slate-900">
+              {taskToEdit ? 'Edit Task or Project' : 'Add Project or Task'}
+            </h2>
           </div>
           <button
             onClick={onClose}

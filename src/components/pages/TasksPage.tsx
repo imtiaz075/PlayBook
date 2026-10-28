@@ -16,12 +16,14 @@ import {
   Layers,
   Calendar,
   ExternalLink,
+  Edit,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Task, TaskStatus, PlatformType, Priority } from '../../types';
 import { formatCurrency } from '../../services/currency';
 import { CountdownBadge } from '../common/CountdownBadge';
 import { InfoTooltip } from '../common/Tooltip';
+import { TaskModal } from '../modals/TaskModal';
 
 interface TasksPageProps {
   onOpenNewTask: () => void;
@@ -54,6 +56,7 @@ export const TasksPage: React.FC<TasksPageProps> = ({
   const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'in_progress' | 'completed' | 'overdue'>('all');
   const [platformFilter, setPlatformFilter] = useState<string>('all');
   const [selectedTaskForDetail, setSelectedTaskForDetail] = useState<Task | null>(null);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -461,6 +464,14 @@ export const TasksPage: React.FC<TasksPageProps> = ({
                         </div>
 
                         <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setEditingTask(task)}
+                            className="p-1 text-slate-400 hover:text-indigo-600 rounded-md"
+                            title="Edit task/project"
+                          >
+                            <Edit size={13} />
+                          </button>
+
                           {task.status !== 'completed' ? (
                             <button
                               onClick={() => completeTask(task.id)}
@@ -491,6 +502,15 @@ export const TasksPage: React.FC<TasksPageProps> = ({
           );
         })}
       </div>
+
+      {/* Edit Task Modal */}
+      {editingTask && (
+        <TaskModal
+          isOpen={!!editingTask}
+          onClose={() => setEditingTask(null)}
+          taskToEdit={editingTask}
+        />
+      )}
     </div>
   );
 };

@@ -9,11 +9,13 @@ import {
   Trash2,
   Filter,
   Check,
+  Edit,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { ScheduleItem } from '../../types';
 import { CountdownBadge } from '../common/CountdownBadge';
 import { InfoTooltip } from '../common/Tooltip';
+import { ScheduleModal } from '../modals/ScheduleModal';
 
 interface SchedulePageProps {
   onOpenNewSchedule: () => void;
@@ -23,6 +25,7 @@ export const SchedulePage: React.FC<SchedulePageProps> = ({ onOpenNewSchedule })
   const { schedules, addSchedule, updateSchedule, deleteSchedule, toggleScheduleComplete } = useApp();
 
   const [filterPeriod, setFilterPeriod] = useState<'day' | 'week' | 'month' | 'all'>('week');
+  const [editingItem, setEditingItem] = useState<ScheduleItem | null>(null);
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -238,6 +241,13 @@ export const SchedulePage: React.FC<SchedulePageProps> = ({ onOpenNewSchedule })
                   {/* Actions */}
                   <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
                     <button
+                      onClick={() => setEditingItem(item)}
+                      className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                      title="Edit schedule"
+                    >
+                      <Edit size={14} />
+                    </button>
+                    <button
                       onClick={() => toggleScheduleComplete(item.id)}
                       className="px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
                     >
@@ -257,6 +267,15 @@ export const SchedulePage: React.FC<SchedulePageProps> = ({ onOpenNewSchedule })
           )}
         </div>
       </div>
+
+      {/* Edit Schedule Modal */}
+      {editingItem && (
+        <ScheduleModal
+          isOpen={!!editingItem}
+          onClose={() => setEditingItem(null)}
+          itemToEdit={editingItem}
+        />
+      )}
     </div>
   );
 };
