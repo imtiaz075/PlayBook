@@ -18,6 +18,9 @@ import {
   WorkdayStatus,
   WorkdaySummary,
   NeedsAttentionSettings,
+  CompanyProfile,
+  PlanBudget,
+  BudgetCategoryAllocation,
 } from '../types';
 import { getStoredRates, saveRates, fetchLiveRates, ExchangeRatesData } from '../services/currency';
 import { playNotificationChime } from '../services/audio';
@@ -36,6 +39,7 @@ const SEED_CLIENTS: Client[] = [
     address: '101 California St, San Francisco, CA',
     country: 'United States',
     preferredCurrency: 'USDT',
+    pricingType: 'hourly',
     hourlyRate: 50,
     agreedPaymentTerms: 'Net 15 via Platform Escrow',
     totalDealValue: 1200,
@@ -55,6 +59,7 @@ const SEED_CLIENTS: Client[] = [
     address: '450 Lexington Ave, New York, NY',
     country: 'United States',
     preferredCurrency: 'USD',
+    pricingType: 'hourly',
     hourlyRate: 65,
     agreedPaymentTerms: 'Milestone escrow approval on submission',
     totalDealValue: 3500,
@@ -74,6 +79,7 @@ const SEED_CLIENTS: Client[] = [
     address: '30 St Mary Axe, London, UK',
     country: 'United Kingdom',
     preferredCurrency: 'USD',
+    pricingType: 'hourly',
     hourlyRate: 85,
     agreedPaymentTerms: '50% advance, 50% on completion via wire',
     totalDealValue: 5000,
@@ -90,6 +96,7 @@ const SEED_CLIENTS: Client[] = [
     email: 'elena@nordicdigital.se',
     country: 'Sweden',
     preferredCurrency: 'EUR',
+    pricingType: 'fixed',
     hourlyRate: 60,
     totalDealValue: 1800,
     status: 'active',
@@ -134,18 +141,18 @@ const SEED_TASKS: Task[] = [
     clientId: 'c-1',
     clientName: 'Alex Vance',
     platform: 'Fiverr',
-    deadline: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0], // 2 days from now
+    deadline: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
     startDate: '2026-10-20',
     priority: 'high',
     status: 'in_progress',
     priceType: 'fixed',
-    projectPrice: 100, // 100 USDT test case
+    projectPrice: 100,
     currency: 'USDT',
-    platformFeePercentage: 20, // 20% Fiverr fee -> 80 USDT net
+    platformFeePercentage: 20,
     amountPaid: 0,
-    totalTimeTrackedSeconds: 7200, // 2 hours
+    totalTimeTrackedSeconds: 7200,
     deadlineAlertEnabled: true,
-    notes: 'Acceptance Criterion #2: Fiverr project worth 100 USDT with 20% fee produces 80 USDT net.',
+    notes: 'Fiverr project worth 100 USDT with 20% fee produces 80 USDT net.',
     createdAt: '2026-10-20T10:00:00.000Z',
     updatedAt: '2026-10-27T10:00:00.000Z',
   },
@@ -155,18 +162,18 @@ const SEED_TASKS: Task[] = [
     clientId: 'c-2',
     clientName: 'Sophia Martinez',
     platform: 'Upwork',
-    deadline: new Date(Date.now() - 86400000).toISOString().split('T')[0], // yesterday (overdue - tests Needs Attention!)
+    deadline: new Date(Date.now() - 86400000).toISOString().split('T')[0],
     startDate: '2026-10-10',
     priority: 'high',
     status: 'open',
     priceType: 'fixed',
     projectPrice: 800,
     currency: 'USD',
-    platformFeePercentage: 15, // 15% Upwork fee -> 680 USD net
-    amountPaid: 500, // 500 USD partial payment -> 300 balance!
+    platformFeePercentage: 15,
+    amountPaid: 500,
     totalTimeTrackedSeconds: 14400,
     deadlineAlertEnabled: true,
-    notes: 'Needs Attention immediately: Overdue deadline. 500 paid, 300 balance remaining.',
+    notes: 'Overdue deadline. 500 paid, 300 balance remaining.',
     createdAt: '2026-10-10T10:00:00.000Z',
     updatedAt: '2026-10-27T08:00:00.000Z',
   },
@@ -182,11 +189,11 @@ const SEED_TASKS: Task[] = [
     status: 'in_progress',
     priceType: 'hourly',
     hourlyRate: 85,
-    projectPrice: 2550, // 30 hrs estimate
+    projectPrice: 2550,
     currency: 'USD',
-    platformFeePercentage: 0, // Direct client = 0% fee
+    platformFeePercentage: 0,
     amountPaid: 1200,
-    totalTimeTrackedSeconds: 36000, // 10 hours
+    totalTimeTrackedSeconds: 36000,
     deadlineAlertEnabled: true,
     createdAt: '2026-10-12T10:00:00.000Z',
     updatedAt: '2026-10-26T12:00:00.000Z',
@@ -226,12 +233,12 @@ const SEED_TIME_ENTRIES: TimeEntry[] = [
     date: new Date().toISOString().split('T')[0],
     startTime: new Date(Date.now() - 3600000 * 3).toISOString(),
     endTime: new Date().toISOString(),
-    durationSeconds: 10800, // 3 hours
+    durationSeconds: 10800,
     hourlyRate: 85,
     isBillable: true,
-    billableAmount: 255, // 3 * 85
+    billableAmount: 255,
     description: 'Built multi-currency transaction ledger table with filtering and sorting.',
-    invoiceId: null, // uninvoiced
+    invoiceId: null,
     createdAt: new Date().toISOString(),
   },
   {
@@ -243,7 +250,7 @@ const SEED_TIME_ENTRIES: TimeEntry[] = [
     date: new Date(Date.now() - 86400000).toISOString().split('T')[0],
     startTime: '2026-10-26T14:00:00.000Z',
     endTime: '2026-10-26T16:00:00.000Z',
-    durationSeconds: 7200, // 2 hours
+    durationSeconds: 7200,
     hourlyRate: 50,
     isBillable: true,
     billableAmount: 100,
@@ -390,7 +397,7 @@ const SEED_SCHEDULES: ScheduleItem[] = [
   {
     id: 's-1',
     title: 'Client Sprint Alignment with Sophia Martinez',
-    date: new Date().toISOString().split('T')[0], // today
+    date: new Date().toISOString().split('T')[0],
     startTime: '11:00',
     endTime: '11:45',
     durationMinutes: 45,
@@ -405,7 +412,7 @@ const SEED_SCHEDULES: ScheduleItem[] = [
   {
     id: 's-2',
     title: 'Deliver Fiverr Webhook Milestone Submission',
-    date: new Date().toISOString().split('T')[0], // today
+    date: new Date().toISOString().split('T')[0],
     startTime: '16:30',
     type: 'reminder',
     notes: 'Upload build zip and post walkthrough video to Fiverr buyer order page.',
@@ -418,7 +425,7 @@ const SEED_SCHEDULES: ScheduleItem[] = [
   {
     id: 's-3',
     title: 'Weekly Expense & Invoice Reconciliation',
-    date: new Date(Date.now() + 86400000).toISOString().split('T')[0], // tomorrow
+    date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
     startTime: '17:00',
     durationMinutes: 30,
     type: 'activity',
@@ -435,13 +442,15 @@ const SEED_GOALS: Goal[] = [
   {
     id: 'g-1',
     name: 'October Target',
-    type: 'income',
+    category: 'achievements',
     targetDate: '2026-10-31',
     targetValue: 6000,
     currentActualValue: 4050,
+    progressPercentage: 67.5,
     measurementMethod: 'numeric_auto',
     priority: 'high',
     isCompleted: false,
+    status: 'in_progress',
     notes: 'Monthly earnings target',
     milestones: [
       { id: 'm-1', title: 'Reach $2,000 earned', targetDate: '2026-10-10', isCompleted: true },
@@ -453,13 +462,15 @@ const SEED_GOALS: Goal[] = [
   {
     id: 'g-2',
     name: 'Q4 Projects Target',
-    type: 'projects_count',
+    category: 'career',
     targetDate: '2026-12-31',
     targetValue: 6,
     currentActualValue: 3,
+    progressPercentage: 50,
     measurementMethod: 'milestones',
     priority: 'medium',
     isCompleted: false,
+    status: 'in_progress',
     notes: 'Client projects delivery',
     milestones: [
       { id: 'm-4', title: 'Deliver Nordic Digital Media prototype', targetDate: '2026-10-24', isCompleted: true },
@@ -471,13 +482,15 @@ const SEED_GOALS: Goal[] = [
   {
     id: 'g-3',
     name: 'Hours Target',
-    type: 'work_hours',
+    category: 'learning',
     targetDate: '2026-10-31',
     targetValue: 100,
     currentActualValue: 72,
+    progressPercentage: 72,
     measurementMethod: 'numeric_auto',
     priority: 'medium',
     isCompleted: false,
+    status: 'in_progress',
     notes: 'Billable work hours',
     milestones: [],
     createdAt: '2026-10-01T08:00:00.000Z',
@@ -485,16 +498,16 @@ const SEED_GOALS: Goal[] = [
 ];
 
 const SEED_BUDGET_CATEGORIES: BudgetCategory[] = [
-  { id: 'cat-1', name: 'Software & Subscriptions', monthlyLimit: 300, isArchived: false },
-  { id: 'cat-2', name: 'Business Expenses & Hardware', monthlyLimit: 500, isArchived: false },
-  { id: 'cat-3', name: 'Rent and Housing', monthlyLimit: 1400, isArchived: false },
-  { id: 'cat-4', name: 'Food and Groceries', monthlyLimit: 600, isArchived: false },
-  { id: 'cat-5', name: 'Internet and Mobile', monthlyLimit: 120, isArchived: false },
-  { id: 'cat-6', name: 'Health & Insurance', monthlyLimit: 250, isArchived: false },
-  { id: 'cat-7', name: 'Education & Courses', monthlyLimit: 150, isArchived: false },
-  { id: 'cat-8', name: 'Taxes Reserve', monthlyLimit: 1000, isArchived: false },
-  { id: 'cat-9', name: 'Savings Target', monthlyLimit: 1200, isArchived: false },
-  { id: 'cat-10', name: 'Entertainment', monthlyLimit: 200, isArchived: false },
+  { id: 'cat-1', name: 'Software & Subscriptions', monthlyLimit: 300, currency: 'USD', color: '#6366f1', iconName: 'Folder' },
+  { id: 'cat-2', name: 'Business Expenses & Hardware', monthlyLimit: 500, currency: 'USD', color: '#10b981', iconName: 'Laptop' },
+  { id: 'cat-3', name: 'Rent and Housing', monthlyLimit: 1400, currency: 'USD', color: '#f59e0b', iconName: 'Home' },
+  { id: 'cat-4', name: 'Food and Groceries', monthlyLimit: 600, currency: 'USD', color: '#ef4444', iconName: 'ShoppingBag' },
+  { id: 'cat-5', name: 'Internet and Mobile', monthlyLimit: 120, currency: 'USD', color: '#8b5cf6', iconName: 'Wifi' },
+  { id: 'cat-6', name: 'Health & Insurance', monthlyLimit: 250, currency: 'USD', color: '#ec4899', iconName: 'Heart' },
+  { id: 'cat-7', name: 'Education & Courses', monthlyLimit: 150, currency: 'USD', color: '#06b6d4', iconName: 'BookOpen' },
+  { id: 'cat-8', name: 'Taxes Reserve', monthlyLimit: 1000, currency: 'USD', color: '#64748b', iconName: 'DollarSign' },
+  { id: 'cat-9', name: 'Savings Target', monthlyLimit: 1200, currency: 'USD', color: '#14b8a6', iconName: 'PiggyBank' },
+  { id: 'cat-10', name: 'Entertainment', monthlyLimit: 200, currency: 'USD', color: '#f97316', iconName: 'Film' },
 ];
 
 const SEED_EXPENSES: Expense[] = [
@@ -503,12 +516,11 @@ const SEED_EXPENSES: Expense[] = [
     title: 'GitHub Copilot & GitHub Team',
     amount: 25,
     currency: 'USD',
+    category: 'Software & Subscriptions',
     date: '2026-10-05',
-    categoryId: 'cat-1',
-    categoryName: 'Software & Subscriptions',
     paymentMethod: 'Credit Card',
     isRecurring: true,
-    recurrenceCadence: 'monthly',
+    recurrenceFrequency: 'monthly',
     notes: 'Essential developer tooling.',
     createdAt: '2026-10-05T09:00:00.000Z',
   },
@@ -517,12 +529,11 @@ const SEED_EXPENSES: Expense[] = [
     title: 'Vercel Pro & Cloudflare Hosting',
     amount: 40,
     currency: 'USD',
+    category: 'Software & Subscriptions',
     date: '2026-10-10',
-    categoryId: 'cat-1',
-    categoryName: 'Software & Subscriptions',
     paymentMethod: 'Credit Card',
     isRecurring: true,
-    recurrenceCadence: 'monthly',
+    recurrenceFrequency: 'monthly',
     notes: 'Client staging domains and CDN.',
     createdAt: '2026-10-10T09:00:00.000Z',
   },
@@ -531,12 +542,11 @@ const SEED_EXPENSES: Expense[] = [
     title: 'Figma Organization Seat',
     amount: 45,
     currency: 'USD',
+    category: 'Software & Subscriptions',
     date: '2026-10-12',
-    categoryId: 'cat-1',
-    categoryName: 'Software & Subscriptions',
     paymentMethod: 'Credit Card',
     isRecurring: true,
-    recurrenceCadence: 'monthly',
+    recurrenceFrequency: 'monthly',
     createdAt: '2026-10-12T09:00:00.000Z',
   },
   {
@@ -544,9 +554,8 @@ const SEED_EXPENSES: Expense[] = [
     title: 'Ergonomic Mechanical Keyboard & Wrist Rest',
     amount: 185,
     currency: 'USD',
+    category: 'Business Expenses & Hardware',
     date: '2026-10-18',
-    categoryId: 'cat-2',
-    categoryName: 'Business Expenses & Hardware',
     paymentMethod: 'Debit Card',
     isRecurring: false,
     notes: 'Productivity equipment upgrade.',
@@ -557,12 +566,11 @@ const SEED_EXPENSES: Expense[] = [
     title: 'High-Speed Fiber Internet (1 Gbps)',
     amount: 85,
     currency: 'USD',
+    category: 'Internet and Mobile',
     date: '2026-10-02',
-    categoryId: 'cat-5',
-    categoryName: 'Internet and Mobile',
     paymentMethod: 'Direct Debit',
     isRecurring: true,
-    recurrenceCadence: 'monthly',
+    recurrenceFrequency: 'monthly',
     createdAt: '2026-10-02T08:00:00.000Z',
   },
 ];
@@ -571,48 +579,48 @@ const SEED_SUBSCRIPTIONS: Subscription[] = [
   {
     id: 'sub-1',
     name: 'GitHub Team & Copilot',
-    amount: 25,
+    cost: 25,
     currency: 'USD',
-    categoryName: 'Software & Subscriptions',
+    category: 'Software & Subscriptions',
+    billingCycle: 'monthly',
     renewalDate: new Date(Date.now() + 86400000 * 7).toISOString().split('T')[0],
-    recurrence: 'monthly',
+    autoRenew: true,
     reminderDaysBefore: 3,
     status: 'active',
-    notes: 'Auto-renews on credit card.',
+    createdAt: '2026-10-01T00:00:00.000Z',
   },
   {
     id: 'sub-2',
     name: 'Figma Professional',
-    amount: 45,
+    cost: 45,
     currency: 'USD',
-    categoryName: 'Software & Subscriptions',
+    category: 'Software & Subscriptions',
+    billingCycle: 'monthly',
     renewalDate: new Date(Date.now() + 86400000 * 14).toISOString().split('T')[0],
-    recurrence: 'monthly',
+    autoRenew: true,
     reminderDaysBefore: 2,
     status: 'active',
+    createdAt: '2026-10-01T00:00:00.000Z',
   },
   {
     id: 'sub-3',
     name: 'JetBrains All Products Pack',
-    amount: 249,
+    cost: 249,
     currency: 'USD',
-    categoryName: 'Software & Subscriptions',
+    category: 'Software & Subscriptions',
+    billingCycle: 'yearly',
     renewalDate: new Date(Date.now() + 86400000 * 45).toISOString().split('T')[0],
-    recurrence: 'yearly',
+    autoRenew: true,
     reminderDaysBefore: 7,
     status: 'active',
+    createdAt: '2026-10-01T00:00:00.000Z',
   },
 ];
 
 const SEED_SETTINGS: UserSettings = {
-  freelancerName: 'Sarah Jenkins',
-  freelancerEmail: 'sarah.jenkins.dev@gmail.com',
-  freelancerTitle: 'Senior Full-Stack & UI/UX Specialist',
-  companyName: 'Jenkins Digital Studio',
-  businessAddress: '742 Evergreen Terrace, Suite 400, Seattle, WA 98101',
-  phone: '+1 (206) 555-0143',
-  taxId: 'US-EIN-98-7654321',
-  paymentInstructions: 'Bank Transfer (ACH/Wire) to Chase Bank #98214-412\nWise: sarah.jenkins.dev@gmail.com\nCrypto / USDT (ERC-20/TRC-20): 0x71C...4a9',
+  userName: 'Sarah Jenkins',
+  userEmail: 'sarah.jenkins.dev@gmail.com',
+  businessName: 'Jenkins Digital Studio',
   defaultCurrency: 'USD',
   defaultHourlyRate: 75,
   platformFees: {
@@ -626,12 +634,11 @@ const SEED_SETTINGS: UserSettings = {
     Other: 5,
   },
   notificationPreferences: {
-    inApp: true,
+    email: true,
     browser: true,
     sound: true,
-    deadlineWarningHours: 48,
+    leadTimeHours: 24,
   },
-  monthlyEarningsGoal: 6000,
 };
 
 interface AppContextType {
@@ -652,6 +659,22 @@ interface AppContextType {
   subscriptions: Subscription[];
   savingsTargets: SavingsTarget[];
   settings: UserSettings;
+
+  // Company Profile & Plan Budgets
+  companyProfile: CompanyProfile;
+  updateCompanyProfile: (updates: Partial<CompanyProfile>) => void;
+  companyProfileModalOpen: boolean;
+  setCompanyProfileModalOpen: (open: boolean) => void;
+
+  planBudgets: PlanBudget[];
+  addPlanBudget: (budgetData: Omit<PlanBudget, 'id' | 'createdAt'>) => PlanBudget;
+  updatePlanBudget: (id: string, updates: Partial<PlanBudget>) => void;
+  deletePlanBudget: (id: string) => void;
+  planBudgetModalOpen: boolean;
+  setPlanBudgetModalOpen: (open: boolean) => void;
+
+  expenseModalOpen: boolean;
+  setExpenseModalOpen: (open: boolean) => void;
 
   // Exchange Rates & Currency
   ratesData: ExchangeRatesData;
@@ -718,6 +741,7 @@ interface AppContextType {
   deleteInvoice: (id: string) => void;
 
   addPayment: (payment: Omit<Payment, 'id' | 'createdAt'>) => Payment;
+  updatePayment: (id: string, updates: Partial<Payment>) => void;
   deletePayment: (id: string) => void;
 
   addSchedule: (item: Omit<ScheduleItem, 'id' | 'createdAt' | 'isCompleted'>) => ScheduleItem;
@@ -734,7 +758,7 @@ interface AppContextType {
   updateExpense: (id: string, updates: Partial<Expense>) => void;
   deleteExpense: (id: string) => void;
 
-  addBudgetCategory: (category: Omit<BudgetCategory, 'id' | 'isArchived'>) => BudgetCategory;
+  addBudgetCategory: (category: Omit<BudgetCategory, 'id'>) => BudgetCategory;
   updateBudgetCategory: (id: string, updates: Partial<BudgetCategory>) => void;
   deleteBudgetCategory: (id: string) => void;
 
@@ -794,6 +818,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // User Settings state declared early
+  const [settings, setSettings] = useState<UserSettings>(() => loadStored('settings', SEED_SETTINGS));
+
   // State collections
   const [clients, setClients] = useState<Client[]>(() => loadStored('clients', SEED_CLIENTS));
   const [tasks, setTasks] = useState<Task[]>(() => loadStored('tasks', SEED_TASKS));
@@ -801,30 +828,95 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [invoices, setInvoices] = useState<Invoice[]>(() => loadStored('invoices', SEED_INVOICES));
   const [payments, setPayments] = useState<Payment[]>(() => loadStored('payments', SEED_PAYMENTS));
   const [schedules, setSchedules] = useState<ScheduleItem[]>(() => loadStored('schedules', SEED_SCHEDULES));
-  const [goals, setGoals] = useState<Goal[]>(() => {
-    const loaded = loadStored('goals', SEED_GOALS);
-    return loaded.map((g) => {
-      if (g.name.includes('October Gross Revenue Target')) {
-        return { ...g, name: 'October Target', notes: 'Monthly earnings target' };
-      }
-      if (g.name.includes('Deliver 6 Client Projects')) {
-        return { ...g, name: 'Q4 Projects Target', notes: 'Client projects delivery' };
-      }
-      if (g.name.includes('Log 100 Focused Billable Work Hours')) {
-        return { ...g, name: 'Hours Target', notes: 'Billable work hours' };
-      }
-      return g;
-    });
-  });
+  const [goals, setGoals] = useState<Goal[]>(() => loadStored('goals', SEED_GOALS));
   const [budgetCategories, setBudgetCategories] = useState<BudgetCategory[]>(() => loadStored('budget_categories', SEED_BUDGET_CATEGORIES));
   const [expenses, setExpenses] = useState<Expense[]>(() => loadStored('expenses', SEED_EXPENSES));
   const [subscriptions, setSubscriptions] = useState<Subscription[]>(() => loadStored('subscriptions', SEED_SUBSCRIPTIONS));
   const [savingsTargets] = useState<SavingsTarget[]>(() => loadStored('savings_targets', []));
-  const [settings, setSettings] = useState<UserSettings>(() => loadStored('settings', SEED_SETTINGS));
+
+  const DEFAULT_COMPANY_PROFILE: CompanyProfile = {
+    businessName: 'Apex Digital Studios',
+    address: '101 Innovation Blvd, Suite 400, San Francisco, CA 94107',
+    email: 'billing@apexdigital.io',
+    phone: '+1 (415) 892-0112',
+    taxRegistrationNumber: 'US-EIN 12-3456789',
+    website: 'https://apexdigital.io',
+    defaultCurrency: 'USD',
+    paymentInstructions: 'Payment due within 15 days via Direct Wire Transfer or USDT Escrow.',
+    bankDetails: 'Bank: Chase Bank · Account: 9876543210 · Routing: 121000358 · SWIFT: CHASUS33',
+    defaultInvoiceNotes: 'Thank you for choosing Apex Digital Studios for your project!',
+    defaultInvoiceTerms: 'Net 15 Days',
+  };
+
+  const [companyProfile, setCompanyProfile] = useState<CompanyProfile>(() =>
+    loadStored('company_profile', DEFAULT_COMPANY_PROFILE)
+  );
+
+  useEffect(() => {
+    saveStored('company_profile', companyProfile);
+  }, [companyProfile]);
+
+  const updateCompanyProfile = useCallback((updates: Partial<CompanyProfile>) => {
+    setCompanyProfile((prev: CompanyProfile) => ({ ...prev, ...updates }));
+  }, []);
+
+  const DEFAULT_PLAN_BUDGETS: PlanBudget[] = [
+    {
+      id: 'pb-1',
+      name: 'Q4 Master Operating Budget',
+      period: 'quarterly',
+      startDate: '2026-10-01',
+      endDate: '2026-12-31',
+      currency: 'USD',
+      totalPlannedBudget: 3500,
+      categoryAllocations: [
+        { category: 'Rent and Housing', plannedAmount: 1200 },
+        { category: 'Food and Groceries', plannedAmount: 500 },
+        { category: 'Software and Subscriptions', plannedAmount: 300 },
+        { category: 'Internet and Mobile', plannedAmount: 150 },
+        { category: 'Savings', plannedAmount: 1000 },
+        { category: 'Business Expenses', plannedAmount: 350 },
+      ],
+      notes: 'Quarterly planned budget allocations across operating categories.',
+      createdAt: new Date().toISOString(),
+    },
+  ];
+
+  const [planBudgets, setPlanBudgets] = useState<PlanBudget[]>(() =>
+    loadStored('plan_budgets', DEFAULT_PLAN_BUDGETS)
+  );
+
+  useEffect(() => {
+    saveStored('plan_budgets', planBudgets);
+  }, [planBudgets]);
+
+  const addPlanBudget = useCallback((budgetData: Omit<PlanBudget, 'id' | 'createdAt'>): PlanBudget => {
+    const now = new Date().toISOString();
+    const newBudget: PlanBudget = {
+      ...budgetData,
+      id: `pb-${Date.now()}`,
+      createdAt: now,
+    };
+    setPlanBudgets((prev: PlanBudget[]) => [newBudget, ...prev]);
+    return newBudget;
+  }, []);
+
+  const updatePlanBudget = useCallback((id: string, updates: Partial<PlanBudget>) => {
+    setPlanBudgets((prev: PlanBudget[]) =>
+      prev.map((b) => (b.id === id ? { ...b, ...updates, updatedAt: new Date().toISOString() } : b))
+    );
+  }, []);
+
+  const deletePlanBudget = useCallback((id: string) => {
+    setPlanBudgets((prev: PlanBudget[]) => prev.filter((b) => b.id !== id));
+  }, []);
 
   // Modals & Panels
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [companyProfileModalOpen, setCompanyProfileModalOpen] = useState(false);
+  const [planBudgetModalOpen, setPlanBudgetModalOpen] = useState(false);
+  const [expenseModalOpen, setExpenseModalOpen] = useState(false);
   const [notificationDrawerOpen, setNotificationDrawerOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -898,12 +990,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setNotifications((prev) => [newNotif, ...prev]);
 
-    // Audible alert if enabled
     if (settings.notificationPreferences.sound) {
       playNotificationChime(type === 'alert' ? 'alert' : 'chime');
     }
 
-    // Native browser notification if permitted
     if (
       settings.notificationPreferences.browser &&
       typeof window !== 'undefined' &&
@@ -966,7 +1056,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return activeTimer.accumulatedSeconds || 0;
   });
 
-  // Timer ticker based on timestamps (not drifting interval!)
+  // Timer ticker based on timestamps
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
     if (activeTimer.isRunning && !activeTimer.isPaused && activeTimer.lastResumedTime) {
@@ -1077,7 +1167,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const nowISO = new Date().toISOString();
     const todayStr = nowISO.split('T')[0];
 
-    // Record time entry automatically
     const newEntry: TimeEntry = {
       id: `te-${Date.now()}`,
       clientId: activeTimer.clientId || 'c-general',
@@ -1098,7 +1187,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setTimeEntries((prev) => [newEntry, ...prev]);
 
-    // Update project total time
     if (activeTimer.projectId) {
       setTasks((prev) =>
         prev.map((t) =>
@@ -1109,7 +1197,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
     }
 
-    // Set summary popup
     setCompletedSessionSummary({
       visible: true,
       durationSeconds: totalSecs,
@@ -1121,7 +1208,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       hourlyRate: rate,
     });
 
-    // Reset timer
     setActiveTimer({
       isRunning: false,
       isPaused: false,
@@ -1176,8 +1262,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const DEFAULT_WORKDAY_STATE: WorkdayState = {
     status: 'idle',
     workdayStartTime: null,
-    targetWorkMinutes: 240, // 4 hours default
-    targetBreakMinutes: 15, // 15 mins default
+    targetWorkMinutes: 240,
+    targetBreakMinutes: 15,
     currentIntervalStartTime: null,
     accumulatedWorkSeconds: 0,
     currentBreakStartTime: null,
@@ -1410,7 +1496,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const interval = setInterval(() => {
       const currentTime = Date.now();
 
-      // Check Work Interval Completion
       if (workdayState.status === 'working' && !workdayState.workIntervalAlerted) {
         let currentActive = workdayState.accumulatedWorkSeconds;
         if (workdayState.currentIntervalStartTime) {
@@ -1430,7 +1515,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
-      // Check Break End
       if (workdayState.status === 'on_break' && !workdayState.breakOverdueAlerted) {
         let breakElapsed = 0;
         if (workdayState.currentBreakStartTime) {
@@ -1509,7 +1593,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const dismissed = needsAttentionSettings.dismissedItemIds || [];
 
-      // Check unresolved, non-dismissed items approaching deadline strictly within the next 12 hours (NOT overdue)
       const eligibleTasks = tasks.filter((t) => {
         if (t.status === 'completed' || t.status === 'cancelled') return false;
         if (dismissed.includes(t.id)) return false;
@@ -1559,7 +1642,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         setNeedsAttentionSettings((prev) => ({ ...prev, lastAlertTimestamp: nowTs }));
       }
-    }, 30000); // checks every 30 seconds
+    }, 30000);
 
     return () => clearInterval(interval);
   }, [
@@ -1573,7 +1656,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     settings.notificationPreferences.sound,
     addNotification,
   ]);
-
 
   // CRUD Implementations
   const addClient = useCallback((clientData: Omit<Client, 'id' | 'createdAt' | 'updatedAt'>): Client => {
@@ -1602,7 +1684,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const addTask = useCallback((taskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'amountPaid' | 'totalTimeTrackedSeconds'>): Task => {
     const now = new Date().toISOString();
-    // Default platform fee rule if not provided
     const feePct = taskData.platformFeePercentage ?? (settings.platformFees[taskData.platform] ?? 0);
     const newTask: Task = {
       ...taskData,
@@ -1634,7 +1715,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTasks((prev) =>
       prev.map((t) => {
         if (t.id === id) {
-          // Compute default expected payout date based on platform rules if not set
           let payoutDays = 0;
           if (t.platform === 'Fiverr') payoutDays = 15;
           else if (t.platform === 'Upwork') payoutDays = 5;
@@ -1665,7 +1745,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setTimeEntries((prev) => [newEntry, ...prev]);
 
-    // Also update task total seconds
     if (newEntry.projectId) {
       setTasks((prev) =>
         prev.map((t) =>
@@ -1699,7 +1778,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setInvoices((prev) => [newInvoice, ...prev]);
 
-    // Mark included time entries as invoiced to prevent double-invoicing
     const timeEntryIds = invoiceData.lineItems.map((li) => li.timeEntryId).filter(Boolean);
     if (timeEntryIds.length > 0) {
       setTimeEntries((prev) =>
@@ -1718,7 +1796,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteInvoice = useCallback((id: string) => {
     setInvoices((prev) => prev.filter((inv) => inv.id !== id));
-    // Release any associated time entries
     setTimeEntries((prev) => prev.map((te) => (te.invoiceId === id ? { ...te, invoiceId: null } : te)));
   }, []);
 
@@ -1731,7 +1808,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setPayments((prev) => [newPayment, ...prev]);
 
-    // Update related invoice if present
     if (newPayment.invoiceId) {
       setInvoices((prev) =>
         prev.map((inv) => {
@@ -1752,7 +1828,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
     }
 
-    // Update related task amountPaid and remaining balance
     if (newPayment.projectId) {
       setTasks((prev) =>
         prev.map((t) => {
@@ -1772,6 +1847,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addNotification('Payment Recorded', `Received ${paymentData.amount} ${paymentData.currency} from ${paymentData.clientName}.`, 'success', 'earnings', newPayment.id);
     return newPayment;
   }, [addNotification]);
+
+  const updatePayment = useCallback((id: string, updates: Partial<Payment>) => {
+    setPayments((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
+  }, []);
 
   const deletePayment = useCallback((id: string) => {
     setPayments((prev) => prev.filter((p) => p.id !== id));
@@ -1865,11 +1944,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setExpenses((prev) => prev.filter((e) => e.id !== id));
   }, []);
 
-  const addBudgetCategory = useCallback((catData: Omit<BudgetCategory, 'id' | 'isArchived'>): BudgetCategory => {
+  const addBudgetCategory = useCallback((catData: Omit<BudgetCategory, 'id'>): BudgetCategory => {
     const newCat: BudgetCategory = {
       ...catData,
       id: `cat-${Date.now()}`,
-      isArchived: false,
     };
     setBudgetCategories((prev) => [...prev, newCat]);
     return newCat;
@@ -1904,19 +1982,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSettings((prev) => ({ ...prev, ...newSettings }));
   }, []);
 
-  // Background reminder checker for schedules, tasks, and subscriptions
+  // Background reminder checker
   useEffect(() => {
     const checkDeadlinesAndSchedules = () => {
       const today = new Date().toISOString().split('T')[0];
 
-      // Check overdue tasks
       tasks.forEach((t) => {
         if (t.status !== 'completed' && t.status !== 'cancelled' && t.deadline < today) {
           // Task overdue
         }
       });
 
-      // Check upcoming subscriptions
       subscriptions.forEach((sub) => {
         if (sub.status === 'active') {
           const daysDiff = Math.ceil(
@@ -1991,6 +2067,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updateInvoice,
       deleteInvoice,
       addPayment,
+      updatePayment,
       deletePayment,
       addSchedule,
       updateSchedule,
@@ -2027,6 +2104,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       needsAttentionSettings,
       updateNeedsAttentionSettings,
       dismissAttentionItem,
+      companyProfile,
+      updateCompanyProfile,
+      companyProfileModalOpen,
+      setCompanyProfileModalOpen,
+      planBudgets,
+      addPlanBudget,
+      updatePlanBudget,
+      deletePlanBudget,
+      planBudgetModalOpen,
+      setPlanBudgetModalOpen,
+      expenseModalOpen,
+      setExpenseModalOpen,
       searchQuery,
       setSearchQuery,
     }),
@@ -2078,6 +2167,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updateInvoice,
       deleteInvoice,
       addPayment,
+      updatePayment,
       deletePayment,
       addSchedule,
       updateSchedule,
@@ -2113,6 +2203,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       needsAttentionSettings,
       updateNeedsAttentionSettings,
       dismissAttentionItem,
+      companyProfile,
+      updateCompanyProfile,
+      companyProfileModalOpen,
+      planBudgets,
+      addPlanBudget,
+      updatePlanBudget,
+      deletePlanBudget,
+      planBudgetModalOpen,
+      expenseModalOpen,
       searchQuery,
     ]
   );

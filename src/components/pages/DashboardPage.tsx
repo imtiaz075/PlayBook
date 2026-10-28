@@ -147,7 +147,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
   // Monthly Budget Progress
   const totalPlannedBudget = budgetCategories
-    .filter((c) => !c.isArchived)
     .reduce((sum, c) => sum + c.monthlyLimit, 0);
 
   const currentMonthExpenses = expenses
@@ -160,15 +159,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   const budgetPctUsed = totalPlannedBudget > 0 ? Math.min(100, Math.round((currentMonthExpenses / totalPlannedBudget) * 100)) : 0;
 
   // Monthly Earnings Goal Progress
-  const primaryGoal = goals.find((g) => g.type === 'income') || goals[0];
-  const goalTarget = primaryGoal ? primaryGoal.targetValue : 6000;
+  const primaryGoal = goals.find((g) => g.category === 'achievements' || g.name.includes('October Target')) || goals[0];
+  const goalTarget = primaryGoal ? (primaryGoal.targetValue || 6000) : 6000;
   const currentMonthPayments = payments
     .filter((p) => p.date.startsWith(todayStr.substring(0, 7)))
     .reduce(
       (sum, p) => sum + convertCurrency(p.amount, p.currency, displayCurrency, ratesData.rates),
       0
     );
-  const goalPct = Math.min(100, Math.round((currentMonthPayments / (goalTarget || 1)) * 100));
+  const goalPct = Math.min(100, Math.round((currentMonthPayments / goalTarget) * 100));
 
   return (
     <div className="space-y-6">

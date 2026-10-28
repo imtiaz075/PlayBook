@@ -1,6 +1,6 @@
 /**
  * Deadline and countdown utility functions for PlayBook.
- * Enforces strict deadline parsing, 12-hour eligibility window, and human-readable countdowns.
+ * Enforces strict deadline parsing, 12-hour eligibility window, and human-readable countdowns with seconds.
  */
 
 export const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
@@ -47,20 +47,30 @@ export function isApproachingIn12Hours(dateStr?: string, timeStr?: string, refer
 }
 
 /**
- * Formats remaining milliseconds into standard format: e.g. "Deadline in 08h 35m"
+ * Formats remaining milliseconds with hours, minutes, and seconds:
+ * e.g. "Deadline in 11h 42m 18s" or "Overdue by 02h 15m 30s"
  */
 export function formatLiveCountdown(remainingMs: number): string {
-  if (remainingMs <= 0) return 'Overdue';
-
-  const totalMinutes = Math.floor(remainingMs / 60000);
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-
-  if (hours === 0 && minutes === 0) {
-    return 'Deadline in < 1m';
+  if (remainingMs <= 0) {
+    const overdueMs = Math.abs(remainingMs);
+    const totalSecs = Math.floor(overdueMs / 1000);
+    const hours = Math.floor(totalSecs / 3600);
+    const minutes = Math.floor((totalSecs % 3600) / 60);
+    const seconds = totalSecs % 60;
+    const hh = String(hours).padStart(2, '0');
+    const mm = String(minutes).padStart(2, '0');
+    const ss = String(seconds).padStart(2, '0');
+    return `Overdue by ${hh}h ${mm}m ${ss}s`;
   }
 
-  const formattedHours = String(hours).padStart(2, '0');
-  const formattedMinutes = String(minutes).padStart(2, '0');
-  return `Deadline in ${formattedHours}h ${formattedMinutes}m`;
+  const totalSecs = Math.floor(remainingMs / 1000);
+  const hours = Math.floor(totalSecs / 3600);
+  const minutes = Math.floor((totalSecs % 3600) / 60);
+  const seconds = totalSecs % 60;
+
+  const hh = String(hours).padStart(2, '0');
+  const mm = String(minutes).padStart(2, '0');
+  const ss = String(seconds).padStart(2, '0');
+
+  return `Deadline in ${hh}h ${mm}m ${ss}s`;
 }

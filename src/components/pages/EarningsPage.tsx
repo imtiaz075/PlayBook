@@ -32,6 +32,7 @@ export const EarningsPage: React.FC<EarningsPageProps> = ({
     tasks,
     invoices,
     clients,
+    goals,
     settings,
     displayCurrency,
     setDisplayCurrency,
@@ -110,7 +111,7 @@ export const EarningsPage: React.FC<EarningsPageProps> = ({
   const netProjectEarnings = grossProjectsValue - totalPlatformFees;
 
   // Monthly Earnings Goal Progress
-  const targetMonthlyGoal = settings.monthlyEarningsGoal || 6000;
+  const targetMonthlyGoal = goals.find((g) => g.name.includes('October Target'))?.targetValue || 6000;
   const currentMonthCash = payments
     .filter((p) => p.date.startsWith(currentMonthPrefix))
     .reduce(

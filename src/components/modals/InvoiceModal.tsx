@@ -24,7 +24,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   onClose,
   prefillData,
 }) => {
-  const { clients, tasks, addInvoice, settings } = useApp();
+  const { clients, tasks, addInvoice, settings, companyProfile } = useApp();
 
   const [clientId, setClientId] = useState(prefillData?.clientId || clients[0]?.id || '');
   const [projectId, setProjectId] = useState(prefillData?.projectId || '');
@@ -35,7 +35,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   );
   const [status, setStatus] = useState<InvoiceStatus>('issued');
   const [notes, setNotes] = useState('');
-  const [paymentTerms, setPaymentTerms] = useState(settings.paymentInstructions || 'Net 14');
+  const [paymentTerms, setPaymentTerms] = useState(companyProfile?.paymentInstructions || 'Net 14');
   const [discountRate, setDiscountRate] = useState(0);
   const [taxRate, setTaxRate] = useState(0);
 

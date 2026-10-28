@@ -13,26 +13,49 @@ export type Priority = 'low' | 'medium' | 'high';
 
 export type TaskStatus = 'open' | 'in_progress' | 'completed' | 'overdue' | 'cancelled';
 
-export type ClientStatus = 'active' | 'inactive' | 'closed' | 'archived';
+export type ClientStatus = 'active' | 'closed' | 'archived';
 
 export type InvoiceStatus = 'draft' | 'issued' | 'partially_paid' | 'paid' | 'overdue' | 'cancelled';
 
-export type GoalType = 'income' | 'projects_count' | 'work_hours' | 'new_clients' | 'savings' | 'learning' | 'custom';
+export type GoalCategory =
+  | 'learning'
+  | 'achievements'
+  | 'career'
+  | 'personal'
+  | 'custom'
+  | string;
 
 export type MeasurementMethod = 'milestones' | 'numeric_auto' | 'manual';
 
+export interface CompanyProfile {
+  businessName: string;
+  businessLogo?: string;
+  address?: string;
+  email?: string;
+  phone?: string;
+  taxRegistrationNumber?: string;
+  website?: string;
+  defaultCurrency: string;
+  paymentInstructions?: string;
+  bankDetails?: string;
+  defaultInvoiceNotes?: string;
+  defaultInvoiceTerms?: string;
+}
+
 export interface Client {
   id: string;
-  fullName: string;
+  fullName: string; // Required
   companyName?: string;
   clientSource: string; // Fiverr, Upwork, LinkedIn, etc.
-  phone?: string;
-  email: string;
+  email?: string; // Optional
+  phone?: string; // Optional
   website?: string;
   address?: string;
-  country: string;
+  country?: string;
   preferredCurrency: string;
-  hourlyRate: number;
+  pricingType: 'hourly' | 'fixed'; // Pricing type selector
+  hourlyRate?: number;
+  fixedAgreedAmount?: number;
   agreedPaymentTerms?: string;
   totalDealValue?: number;
   notes?: string;
@@ -77,8 +100,8 @@ export interface TimeEntry {
   projectName: string;
   clientName: string;
   date: string; // YYYY-MM-DD
-  startTime: string; // ISO
-  endTime: string; // ISO
+  startTime: string; // ISO or HH:mm
+  endTime: string; // ISO or HH:mm
   durationSeconds: number;
   hourlyRate: number;
   isBillable: boolean;
@@ -171,24 +194,53 @@ export interface GoalMilestone {
 export interface Goal {
   id: string;
   name: string;
-  type: GoalType;
+  category: GoalCategory;
+  customCategoryName?: string;
+  description?: string;
+  reason?: string;
+  startDate?: string;
   targetDate: string; // YYYY-MM-DD
-  targetValue: number;
-  currentActualValue: number;
-  measurementMethod: MeasurementMethod;
   priority: Priority;
+  measurementMethod: MeasurementMethod;
+  targetValue?: number;
+  currentActualValue: number;
+  progressPercentage: number;
   notes?: string;
+  achievementsLog?: { date: string; note: string }[];
+  reminderSettings?: string;
+  status: 'not_started' | 'in_progress' | 'completed' | 'paused' | 'cancelled';
   isCompleted: boolean;
   milestones: GoalMilestone[];
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface BudgetCategory {
   id: string;
   name: string;
   monthlyLimit: number;
-  icon?: string;
-  isArchived: boolean;
+  currency: string;
+  color: string;
+  iconName: string;
+}
+
+export interface BudgetCategoryAllocation {
+  category: string;
+  plannedAmount: number;
+}
+
+export interface PlanBudget {
+  id: string;
+  name: string;
+  period: 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom';
+  startDate: string;
+  endDate: string;
+  currency: string;
+  totalPlannedBudget: number;
+  categoryAllocations: BudgetCategoryAllocation[];
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export interface Expense {
@@ -196,66 +248,66 @@ export interface Expense {
   title: string;
   amount: number;
   currency: string;
+  category: string;
+  isCustomCategory?: boolean;
   date: string; // YYYY-MM-DD
-  categoryId: string;
-  categoryName: string;
-  paymentMethod: string;
+  paymentMethod?: string;
+  budgetId?: string;
   isRecurring: boolean;
-  recurrenceCadence?: 'weekly' | 'monthly' | 'yearly';
+  recurrenceFrequency?: 'weekly' | 'monthly' | 'yearly';
+  nextRenewalDate?: string;
   notes?: string;
+  receiptAttachment?: string;
   createdAt: string;
 }
 
 export interface Subscription {
   id: string;
   name: string;
-  amount: number;
+  cost: number;
   currency: string;
-  categoryName: string;
+  billingCycle: 'monthly' | 'yearly';
+  category: string;
   renewalDate: string; // YYYY-MM-DD
-  recurrence: 'monthly' | 'quarterly' | 'yearly';
+  autoRenew: boolean;
   reminderDaysBefore: number;
-  status: 'active' | 'cancelled';
-  notes?: string;
+  status: 'active' | 'cancelled' | 'paused';
+  createdAt: string;
 }
 
 export interface SavingsTarget {
   id: string;
-  title: string;
+  name: string;
   targetAmount: number;
   currentAmount: number;
+  currency: string;
   targetDate: string;
   notes?: string;
+  createdAt: string;
 }
 
 export interface UserSettings {
-  freelancerName: string;
-  freelancerEmail: string;
-  freelancerTitle: string;
-  companyName: string;
-  businessAddress: string;
-  phone: string;
-  taxId: string;
-  paymentInstructions: string;
+  userName: string;
+  userEmail: string;
+  businessName: string;
   defaultCurrency: string;
   defaultHourlyRate: number;
-  platformFees: Record<string, number>;
+  platformFees: Record<string, number>; // e.g. { Fiverr: 20, Upwork: 15 }
   notificationPreferences: {
-    inApp: boolean;
+    email: boolean;
     browser: boolean;
     sound: boolean;
-    deadlineWarningHours: number;
+    leadTimeHours: number;
   };
-  monthlyEarningsGoal: number;
 }
 
 export interface ActiveTimer {
   isRunning: boolean;
   isPaused: boolean;
   startTime: number | null; // Date.now() timestamp
-  accumulatedSeconds: number;
-  lastResumedTime: number | null;
-  projectId: string;
+  accumulatedSeconds: number; // accumulated time before current pause/resume
+  lastResumedTime: number | null; // Date.now() timestamp when timer was last resumed
+  projectId: string; // associated task/project ID
   clientId: string;
   projectName: string;
   clientName: string;
@@ -278,16 +330,16 @@ export type WorkdayStatus = 'idle' | 'working' | 'on_break' | 'paused' | 'comple
 
 export interface WorkdayState {
   status: WorkdayStatus;
-  workdayStartTime: number | null; // Date.now() timestamp when workday started
-  targetWorkMinutes: number; // e.g., 180, 240, 360, 480 or custom
-  targetBreakMinutes: number; // e.g., 15, 30, 60, 120 or custom
-  currentIntervalStartTime: number | null; // start timestamp of current active work interval
-  accumulatedWorkSeconds: number; // total active work seconds accumulated before current interval
-  currentBreakStartTime: number | null; // start timestamp of current break interval
-  accumulatedBreakSeconds: number; // total break seconds accumulated
-  workSessionsCount: number; // count of work sessions completed
-  breaksCount: number; // count of breaks taken
-  pausedAt: number | null; // timestamp when paused
+  workdayStartTime: number | null;
+  targetWorkMinutes: number;
+  targetBreakMinutes: number;
+  currentIntervalStartTime: number | null;
+  accumulatedWorkSeconds: number;
+  currentBreakStartTime: number | null;
+  accumulatedBreakSeconds: number;
+  workSessionsCount: number;
+  breaksCount: number;
+  pausedAt: number | null;
   previousStatusBeforePause?: WorkdayStatus;
   workIntervalAlerted: boolean;
   breakOverdueAlerted: boolean;
@@ -295,9 +347,9 @@ export interface WorkdayState {
 
 export interface WorkdaySummary {
   id: string;
-  date: string; // YYYY-MM-DD
-  startTime: string; // HH:mm
-  endTime: string; // HH:mm
+  date: string;
+  startTime: string;
+  endTime: string;
   totalElapsedSeconds: number;
   activeWorkSeconds: number;
   totalBreakSeconds: number;
@@ -312,8 +364,7 @@ export interface WorkdaySummary {
 
 export interface NeedsAttentionSettings {
   recurringReminderEnabled: boolean;
-  reminderIntervalHours: number; // default 2 hours
+  reminderIntervalHours: number;
   lastAlertTimestamp: number;
   dismissedItemIds: string[];
 }
-

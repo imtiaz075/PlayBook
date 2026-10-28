@@ -99,58 +99,43 @@ export const SettingsModal: React.FC = () => {
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Freelancer Name</label>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">User Name</label>
                   <input
                     type="text"
-                    value={formData.freelancerName}
-                    onChange={(e) => setFormData({ ...formData, freelancerName: e.target.value })}
+                    value={formData.userName}
+                    onChange={(e) => setFormData({ ...formData, userName: e.target.value })}
                     className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Professional Title</label>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Business Name</label>
                   <input
                     type="text"
-                    value={formData.freelancerTitle}
-                    onChange={(e) => setFormData({ ...formData, freelancerTitle: e.target.value })}
+                    value={formData.businessName}
+                    onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
                     className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Company / Studio Name</label>
-                  <input
-                    type="text"
-                    value={formData.companyName}
-                    onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
-                    className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Email (for Invoices)</label>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">User Email</label>
                   <input
                     type="email"
-                    value={formData.freelancerEmail}
-                    onChange={(e) => setFormData({ ...formData, freelancerEmail: e.target.value })}
+                    value={formData.userEmail}
+                    onChange={(e) => setFormData({ ...formData, userEmail: e.target.value })}
                     className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Phone Number</label>
-                  <input
-                    type="text"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Tax ID / Business Registration</label>
-                  <input
-                    type="text"
-                    value={formData.taxId}
-                    onChange={(e) => setFormData({ ...formData, taxId: e.target.value })}
-                    className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  />
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Default Currency</label>
+                  <select
+                    value={formData.defaultCurrency}
+                    onChange={(e) => setFormData({ ...formData, defaultCurrency: e.target.value })}
+                    className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  >
+                    {['USD', 'USDT', 'EUR', 'GBP', 'PKR', 'INR', 'AED', 'SAR', 'CAD'].map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-700 mb-1">Default Hourly Rate ($)</label>
@@ -161,36 +146,6 @@ export const SettingsModal: React.FC = () => {
                     className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Monthly Earnings Target ($)</label>
-                  <input
-                    type="number"
-                    value={formData.monthlyEarningsGoal}
-                    onChange={(e) => setFormData({ ...formData, monthlyEarningsGoal: Number(e.target.value) })}
-                    className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Business Address</label>
-                <input
-                  type="text"
-                  value={formData.businessAddress}
-                  onChange={(e) => setFormData({ ...formData, businessAddress: e.target.value })}
-                  className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Payment Instructions (appears on generated PDF invoices)</label>
-                <textarea
-                  rows={3}
-                  value={formData.paymentInstructions}
-                  onChange={(e) => setFormData({ ...formData, paymentInstructions: e.target.value })}
-                  className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-slate-800"
-                  placeholder="Bank wire transfer details, Wise email, USDT wallet address, etc."
-                />
               </div>
             </div>
           )}
@@ -249,18 +204,18 @@ export const SettingsModal: React.FC = () => {
               <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className="text-xs font-semibold text-slate-800">In-App Notifications</span>
-                    <p className="text-[11px] text-slate-500">Show notification toasts and drawer badges for reminders</p>
+                    <span className="text-xs font-semibold text-slate-800">Email Notifications</span>
+                    <p className="text-[11px] text-slate-500">Send reminder emails for approaching deadlines</p>
                   </div>
                   <input
                     type="checkbox"
-                    checked={formData.notificationPreferences.inApp}
+                    checked={formData.notificationPreferences.email}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
                         notificationPreferences: {
                           ...formData.notificationPreferences,
-                          inApp: e.target.checked,
+                          email: e.target.checked,
                         },
                       })
                     }
@@ -308,7 +263,7 @@ export const SettingsModal: React.FC = () => {
                     <button
                       type="button"
                       onClick={requestBrowserPermission}
-                      className="px-2.5 py-1 text-[11px] font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition-colors"
+                      className="px-2.5 py-1 text-[11px] font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
                     >
                       Grant Permission
                     </button>
@@ -321,17 +276,17 @@ export const SettingsModal: React.FC = () => {
 
                 <div className="pt-3 border-t border-slate-200">
                   <label className="block text-xs font-medium text-slate-700 mb-1">
-                    Deadline Warning Threshold (Hours before deadline)
+                    Advance Lead Time (Hours)
                   </label>
                   <input
                     type="number"
-                    value={formData.notificationPreferences.deadlineWarningHours}
+                    value={formData.notificationPreferences.leadTimeHours}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
                         notificationPreferences: {
                           ...formData.notificationPreferences,
-                          deadlineWarningHours: Number(e.target.value),
+                          leadTimeHours: Number(e.target.value),
                         },
                       })
                     }

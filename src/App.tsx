@@ -31,8 +31,9 @@ import { SubscriptionModal } from './components/modals/SubscriptionModal';
 import { GoalModal } from './components/modals/GoalModal';
 import { ManualTimeModal } from './components/modals/ManualTimeModal';
 import { ClientDetailModal } from './components/modals/ClientDetailModal';
+import { CompanyProfileModal } from './components/modals/CompanyProfileModal';
 
-import { Task, Invoice, Client } from './types';
+import { Task, Invoice } from './types';
 
 const MainAppContent: React.FC = () => {
   const {
@@ -41,6 +42,11 @@ const MainAppContent: React.FC = () => {
     workdaySummaryOpen,
     setWorkdaySummaryOpen,
     saveWorkdaySummaryNotes,
+    companyProfile,
+    updateCompanyProfile,
+    companyProfileModalOpen,
+    setCompanyProfileModalOpen,
+    addExpense,
   } = useApp();
 
   // Navigation & responsive states
@@ -101,7 +107,6 @@ const MainAppContent: React.FC = () => {
       projectId: task.id,
       projectName: task.name,
       amount: task.projectPrice,
-      durationHours: Number((task.totalTimeTrackedSeconds / 3600).toFixed(1)) || 1,
       hourlyRate: task.hourlyRate,
     });
     setInvoiceModalOpen(true);
@@ -130,17 +135,13 @@ const MainAppContent: React.FC = () => {
     setTaskModalOpen(true);
   };
 
-  const handleOpenNewSchedule = () => {
-    setScheduleModalOpen(true);
-  };
-
   const handleOpenClientDetails = (clientId: string) => {
     setDetailClientId(clientId);
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-50 text-slate-900 font-sans">
-      {/* Persistent Left Sidebar */}
+    <div className="flex h-screen bg-slate-100 font-sans text-slate-800 antialiased overflow-hidden">
+      {/* Sidebar Navigation */}
       <Sidebar
         collapsed={sidebarCollapsed}
         setCollapsed={setSidebarCollapsed}
@@ -148,38 +149,38 @@ const MainAppContent: React.FC = () => {
         setMobileOpen={setMobileMenuOpen}
       />
 
-      {/* Main Viewport */}
-      <div className="flex-1 flex flex-col min-w-0">
+      {/* Main Layout Area */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Header onOpenMobileMenu={() => setMobileMenuOpen(true)} />
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           {activePage === 'dashboard' && (
             <DashboardPage
               onOpenCreateInvoice={handleOpenCreateInvoice}
               onOpenRecordPayment={handleOpenRecordPayment}
               onOpenNewTask={() => handleOpenNewTask()}
-              onOpenNewSchedule={handleOpenNewSchedule}
+              onOpenNewSchedule={() => setScheduleModalOpen(true)}
             />
           )}
 
           {activePage === 'today' && (
             <TodayPage
               onOpenNewTask={() => handleOpenNewTask()}
-              onOpenNewSchedule={handleOpenNewSchedule}
+              onOpenNewSchedule={() => setScheduleModalOpen(true)}
               onOpenRecordPayment={handleOpenRecordPayment}
               onOpenClientDetails={handleOpenClientDetails}
             />
           )}
 
           {activePage === 'schedule' && (
-            <SchedulePage onOpenNewSchedule={handleOpenNewSchedule} />
+            <SchedulePage onOpenNewSchedule={() => setScheduleModalOpen(true)} />
           )}
 
           {activePage === 'tasks' && (
             <TasksPage
               onOpenNewTask={() => handleOpenNewTask()}
-              onOpenRecordPaymentWithTask={handleOpenRecordPaymentWithTask}
               onOpenCreateInvoiceWithTask={handleOpenCreateInvoiceWithTask}
+              onOpenRecordPaymentWithTask={handleOpenRecordPaymentWithTask}
               onOpenClientDetails={handleOpenClientDetails}
             />
           )}
@@ -228,6 +229,13 @@ const MainAppContent: React.FC = () => {
       <NotificationDrawer />
       <TimerSummaryModal onOpenCreateInvoiceWithData={handleOpenCreateInvoiceWithData} />
 
+      <CompanyProfileModal
+        isOpen={companyProfileModalOpen}
+        onClose={() => setCompanyProfileModalOpen(false)}
+        companyProfile={companyProfile}
+        onSaveCompanyProfile={updateCompanyProfile}
+      />
+
       <InvoiceModal
         isOpen={invoiceModalOpen}
         onClose={() => setInvoiceModalOpen(false)}
@@ -260,6 +268,7 @@ const MainAppContent: React.FC = () => {
       <ExpenseModal
         isOpen={expenseModalOpen}
         onClose={() => setExpenseModalOpen(false)}
+        onSaveExpense={addExpense}
       />
 
       <SubscriptionModal

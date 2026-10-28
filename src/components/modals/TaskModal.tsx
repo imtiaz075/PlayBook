@@ -55,6 +55,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       clientSource: platform,
       country: 'United States',
       preferredCurrency: currency,
+      pricingType: 'hourly',
       hourlyRate: Number(hourlyRate) || 50,
       status: 'active',
     });

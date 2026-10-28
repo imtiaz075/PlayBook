@@ -198,7 +198,7 @@ export const ReportsPage: React.FC = () => {
   const topExpenseCategory = useMemo(() => {
     const map: Record<string, number> = {};
     monthExpenses.forEach((e) => {
-      map[e.categoryName] = (map[e.categoryName] || 0) + e.amount;
+      map[e.category] = (map[e.category] || 0) + e.amount;
     });
     const sorted = Object.entries(map).sort((a, b) => b[1] - a[1]);
     return sorted[0] ? { category: sorted[0][0], amount: sorted[0][1] } : null;
@@ -230,7 +230,7 @@ export const ReportsPage: React.FC = () => {
     const expensesData = expenses.map((e) => ({
       Date: e.date,
       Title: e.title,
-      Category: e.categoryName,
+      Category: e.category,
       Amount: e.amount,
       Currency: e.currency,
       PaymentMethod: e.paymentMethod,
@@ -291,7 +291,7 @@ export const ReportsPage: React.FC = () => {
         rows: monthExpenses.map((e) => [
           e.date,
           e.title,
-          e.categoryName,
+          e.category,
           formatCurrency(e.amount, e.currency),
         ]),
       },

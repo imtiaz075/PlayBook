@@ -117,8 +117,7 @@ export const QuickAddModal: React.FC = () => {
       amount: Number(expAmount),
       currency: 'USD',
       date: expDate,
-      categoryId: expCatId,
-      categoryName: cat?.name || 'General Expense',
+      category: cat?.name || 'General Expense',
       paymentMethod: 'Credit Card',
       isRecurring: false,
     });
@@ -136,6 +135,7 @@ export const QuickAddModal: React.FC = () => {
       clientSource: contactSource,
       country: 'United States',
       preferredCurrency: 'USD',
+      pricingType: 'hourly',
       hourlyRate: Number(contactRate) || 60,
       status: 'active',
     });
@@ -148,9 +148,11 @@ export const QuickAddModal: React.FC = () => {
 
     addGoal({
       name: goalName.trim(),
-      type: 'income',
+      category: 'achievements',
       targetDate: goalTargetDate,
       targetValue: Number(goalTargetValue) || 1000,
+      progressPercentage: 0,
+      status: 'not_started',
       measurementMethod: 'numeric_auto',
       priority: 'high',
       notes: '',

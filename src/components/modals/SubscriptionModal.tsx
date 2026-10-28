@@ -32,14 +32,15 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
 
     addSubscription({
       name: name.trim(),
-      amount: Number(amount),
+      cost: Number(amount),
       currency,
-      categoryName,
+      billingCycle: recurrence === 'yearly' ? 'yearly' : 'monthly',
+      category: categoryName,
       renewalDate,
-      recurrence,
+      autoRenew: true,
       reminderDaysBefore,
       status: 'active',
-      notes: notes.trim(),
+      createdAt: new Date().toISOString(),
     });
 
     onClose();

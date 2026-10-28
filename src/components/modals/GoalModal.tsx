@@ -1,33 +1,87 @@
-import React, { useState } from 'react';
-import { X, Target, Plus, Trash2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Target, Plus, Trash2, Save } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { GoalType, MeasurementMethod, Priority, GoalMilestone } from '../../types';
+import { Goal, GoalCategory, MeasurementMethod, Priority, GoalMilestone } from '../../types';
 
 interface GoalModalProps {
   isOpen: boolean;
   onClose: () => void;
+  editingGoal?: Goal | null;
 }
 
-export const GoalModal: React.FC<GoalModalProps> = ({ isOpen, onClose }) => {
-  const { addGoal } = useApp();
+export const GoalModal: React.FC<GoalModalProps> = ({ isOpen, onClose, editingGoal }) => {
+  const { addGoal, updateGoal } = useApp();
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const in30DaysStr = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
 
   const [name, setName] = useState('');
-  const [type, setType] = useState<GoalType>('income');
-  const [targetDate, setTargetDate] = useState(
-    new Date(Date.now() + 86400000 * 30).toISOString().split('T')[0]
-  );
-  const [targetValue, setTargetValue] = useState('6000');
-  const [measurementMethod, setMeasurementMethod] = useState<MeasurementMethod>('numeric_auto');
+  const [category, setCategory] = useState<GoalCategory>('learning');
+  const [customCategoryName, setCustomCategoryName] = useState('');
+  const [description, setDescription] = useState('');
+  const [reason, setReason] = useState('');
+  const [startDate, setStartDate] = useState(todayStr);
+  const [targetDate, setTargetDate] = useState(in30DaysStr);
   const [priority, setPriority] = useState<Priority>('high');
+  const [measurementMethod, setMeasurementMethod] = useState<MeasurementMethod>('milestones');
+  const [targetValue, setTargetValue] = useState<string>('100');
+  const [progressPercentage, setProgressPercentage] = useState<number>(0);
+  const [status, setStatus] = useState<'not_started' | 'in_progress' | 'completed' | 'paused' | 'cancelled'>('in_progress');
   const [notes, setNotes] = useState('');
 
-  const [milestones, setMilestones] = useState<Array<{ id: string; title: string; targetDate: string }>>([
+  const [milestones, setMilestones] = useState<Array<{ id: string; title: string; targetDate: string; isCompleted: boolean }>>([
     {
       id: 'm-1',
-      title: 'First milestone milestone achievement',
-      targetDate: new Date(Date.now() + 86400000 * 10).toISOString().split('T')[0],
+      title: 'Complete initial learning module',
+      targetDate: new Date(Date.now() + 10 * 86400000).toISOString().split('T')[0],
+      isCompleted: false,
     },
   ]);
+
+  useEffect(() => {
+    if (editingGoal) {
+      setName(editingGoal.name || '');
+      setCategory(editingGoal.category || 'learning');
+      setCustomCategoryName(editingGoal.customCategoryName || '');
+      setDescription(editingGoal.description || '');
+      setReason(editingGoal.reason || '');
+      setStartDate(editingGoal.startDate || todayStr);
+      setTargetDate(editingGoal.targetDate || in30DaysStr);
+      setPriority(editingGoal.priority || 'high');
+      setMeasurementMethod(editingGoal.measurementMethod || 'milestones');
+      setTargetValue(editingGoal.targetValue ? String(editingGoal.targetValue) : '100');
+      setProgressPercentage(editingGoal.progressPercentage || 0);
+      setStatus(editingGoal.status || 'in_progress');
+      setNotes(editingGoal.notes || '');
+      setMilestones(
+        editingGoal.milestones
+          ? editingGoal.milestones.map((m) => ({ ...m }))
+          : []
+      );
+    } else {
+      setName('');
+      setCategory('learning');
+      setCustomCategoryName('');
+      setDescription('');
+      setReason('');
+      setStartDate(todayStr);
+      setTargetDate(in30DaysStr);
+      setPriority('high');
+      setMeasurementMethod('milestones');
+      setTargetValue('100');
+      setProgressPercentage(0);
+      setStatus('in_progress');
+      setNotes('');
+      setMilestones([
+        {
+          id: 'm-1',
+          title: 'Complete initial learning milestone',
+          targetDate: new Date(Date.now() + 10 * 86400000).toISOString().split('T')[0],
+          isCompleted: false,
+        },
+      ]);
+    }
+  }, [editingGoal, isOpen]);
 
   if (!isOpen) return null;
 
@@ -38,11 +92,12 @@ export const GoalModal: React.FC<GoalModalProps> = ({ isOpen, onClose }) => {
         id: `m-${Date.now()}`,
         title: '',
         targetDate: targetDate,
+        isCompleted: false,
       },
     ]);
   };
 
-  const handleMilestoneChange = (index: number, field: string, val: string) => {
+  const handleMilestoneChange = (index: number, field: string, val: any) => {
     setMilestones((prev) => {
       const copy = [...prev];
       copy[index] = { ...copy[index], [field]: val };
@@ -64,30 +119,65 @@ export const GoalModal: React.FC<GoalModalProps> = ({ isOpen, onClose }) => {
         id: m.id,
         title: m.title.trim(),
         targetDate: m.targetDate,
-        isCompleted: false,
+        isCompleted: m.isCompleted || false,
       }));
 
-    addGoal({
-      name: name.trim(),
-      type,
-      targetDate,
-      targetValue: Number(targetValue) || 1,
-      measurementMethod,
-      priority,
-      notes: notes.trim(),
-      milestones: formattedMilestones,
-    });
+    // Auto-calculate progress percentage if milestones exist
+    let calcProgress = progressPercentage;
+    if (measurementMethod === 'milestones' && formattedMilestones.length > 0) {
+      const doneCount = formattedMilestones.filter((m) => m.isCompleted).length;
+      calcProgress = Math.round((doneCount / formattedMilestones.length) * 100);
+    }
+
+    if (editingGoal) {
+      updateGoal(editingGoal.id, {
+        name: name.trim(),
+        category,
+        customCategoryName: category === 'custom' ? customCategoryName.trim() : undefined,
+        description: description.trim() || undefined,
+        reason: reason.trim() || undefined,
+        startDate,
+        targetDate,
+        priority,
+        measurementMethod,
+        targetValue: Number(targetValue) || 100,
+        progressPercentage: calcProgress,
+        status,
+        isCompleted: status === 'completed' || calcProgress >= 100,
+        notes: notes.trim() || undefined,
+        milestones: formattedMilestones,
+      });
+    } else {
+      addGoal({
+        name: name.trim(),
+        category,
+        customCategoryName: category === 'custom' ? customCategoryName.trim() : undefined,
+        description: description.trim() || undefined,
+        reason: reason.trim() || undefined,
+        startDate,
+        targetDate,
+        priority,
+        measurementMethod,
+        targetValue: Number(targetValue) || 100,
+        progressPercentage: calcProgress,
+        status,
+        notes: notes.trim() || undefined,
+        milestones: formattedMilestones,
+      });
+    }
 
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-lg w-full max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-200">
+      <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 sticky top-0 bg-white z-10">
           <div className="flex items-center gap-2">
-            <Target size={18} className="text-indigo-600" />
-            <h2 className="text-sm font-bold text-slate-900">Create Professional Goal</h2>
+            <Target size={18} className="text-purple-600" />
+            <h2 className="text-sm font-bold text-slate-900">
+              {editingGoal ? 'Edit Growth & Success Goal' : 'Create Personal & Professional Goal'}
+            </h2>
           </div>
           <button
             onClick={onClose}
@@ -99,141 +189,203 @@ export const GoalModal: React.FC<GoalModalProps> = ({ isOpen, onClose }) => {
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
           <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">Goal Name *</label>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Goal Title <span className="text-rose-500">*</span>
+            </label>
             <input
               type="text"
               required
-              placeholder="e.g. Earn $6,000 USD Monthly Baseline"
+              placeholder="e.g. Master Advanced TypeScript & Full-Stack Systems"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium"
+              className="w-full text-xs px-3 py-2 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 font-medium"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">Goal Type *</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Category</label>
               <select
-                value={type}
-                onChange={(e) => {
-                  const t = e.target.value as GoalType;
-                  setType(t);
-                  if (t === 'income') {
-                    setTargetValue('6000');
-                    setMeasurementMethod('numeric_auto');
-                  } else if (t === 'work_hours') {
-                    setTargetValue('100');
-                    setMeasurementMethod('numeric_auto');
-                  } else if (t === 'projects_count') {
-                    setTargetValue('6');
-                    setMeasurementMethod('milestones');
-                  }
-                }}
-                className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                value={category}
+                onChange={(e) => setCategory(e.target.value as GoalCategory)}
+                className="w-full text-xs px-3 py-2 border border-slate-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
               >
-                <option value="income">Revenue & Income</option>
-                <option value="projects_count">Completed Projects Count</option>
-                <option value="work_hours">Billable Work Hours</option>
-                <option value="new_clients">Acquire New Clients</option>
-                <option value="savings">Savings Target</option>
-                <option value="learning">Skill & Learning</option>
-                <option value="custom">Custom Goal</option>
+                <option value="learning">Learning & Skill Master</option>
+                <option value="achievements">Achievements & Certifications</option>
+                <option value="career">Career & Business Success</option>
+                <option value="personal">Personal Development & Habits</option>
+                <option value="custom">Custom Goal Category</option>
               </select>
             </div>
 
+            {category === 'custom' ? (
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Custom Category Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Public Speaking"
+                  value={customCategoryName}
+                  onChange={(e) => setCustomCategoryName(e.target.value)}
+                  className="w-full text-xs px-3 py-2 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+            ) : (
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Priority</label>
+                <select
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value as Priority)}
+                  className="w-full text-xs px-3 py-2 border border-slate-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  <option value="high">High Priority</option>
+                  <option value="medium">Medium Priority</option>
+                  <option value="low">Low Priority</option>
+                </select>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">Description & Reason for Pursuing</label>
+            <textarea
+              rows={2}
+              placeholder="Why is achieving this goal important for your career or personal growth?"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="w-full text-xs px-3 py-2 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">Target Date *</label>
+              <label className="block text-xs font-medium text-slate-700 mb-1">Start Date</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full text-xs px-3 py-2 border border-slate-300 rounded-xl"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">Target Completion Date</label>
               <input
                 type="date"
                 required
                 value={targetDate}
                 onChange={(e) => setTargetDate(e.target.value)}
-                className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="w-full text-xs px-3 py-2 border border-slate-300 rounded-xl"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
-                Target Numeric Value *
-              </label>
-              <input
-                type="number"
-                min="1"
-                required
-                value={targetValue}
-                onChange={(e) => setTargetValue(e.target.value)}
-                className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              />
+          <div className="p-3 bg-purple-50/50 border border-purple-200 rounded-xl space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">Measurement Method</label>
+                <select
+                  value={measurementMethod}
+                  onChange={(e) => setMeasurementMethod(e.target.value as MeasurementMethod)}
+                  className="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white"
+                >
+                  <option value="milestones">Milestone Steps</option>
+                  <option value="manual">Manual Progress %</option>
+                  <option value="numeric_auto">Numeric Target</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">Goal Status</label>
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as any)}
+                  className="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white"
+                >
+                  <option value="not_started">Not Started</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="completed">Completed</option>
+                  <option value="paused">Paused</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
-                Measurement Method
-              </label>
-              <select
-                value={measurementMethod}
-                onChange={(e) => setMeasurementMethod(e.target.value as MeasurementMethod)}
-                className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              >
-                <option value="numeric_auto">Automatic (from app earnings/time/tasks)</option>
-                <option value="milestones">Milestone Checkpoints</option>
-                <option value="manual">Manual Progress Updates</option>
-              </select>
-            </div>
+            {measurementMethod === 'manual' && (
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                  Progress Percentage ({progressPercentage}%)
+                </label>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={progressPercentage}
+                  onChange={(e) => setProgressPercentage(parseInt(e.target.value, 10))}
+                  className="w-full accent-purple-600 cursor-pointer"
+                />
+              </div>
+            )}
           </div>
 
-          {/* Milestones list */}
-          <div className="pt-2">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold text-slate-800">Milestone Checkpoints</span>
-              <button
-                type="button"
-                onClick={handleAddMilestoneInput}
-                className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
-              >
-                <Plus size={13} />
-                <span>Add Milestone</span>
-              </button>
-            </div>
-
+          {/* Milestones List */}
+          {measurementMethod === 'milestones' && (
             <div className="space-y-2">
-              {milestones.map((m, index) => (
-                <div key={m.id} className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    placeholder="Milestone title"
-                    value={m.title}
-                    onChange={(e) => handleMilestoneChange(index, 'title', e.target.value)}
-                    className="flex-1 text-xs px-2.5 py-1.5 border border-slate-300 rounded bg-white"
-                  />
-                  <input
-                    type="date"
-                    value={m.targetDate}
-                    onChange={(e) => handleMilestoneChange(index, 'targetDate', e.target.value)}
-                    className="w-32 text-xs px-2 py-1.5 border border-slate-300 rounded bg-white font-mono"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveMilestone(index)}
-                    className="p-1 text-slate-400 hover:text-rose-600"
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              ))}
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-800">
+                  Key Milestones / Steps ({milestones.length})
+                </label>
+                <button
+                  type="button"
+                  onClick={handleAddMilestoneInput}
+                  className="text-xs text-purple-600 font-bold hover:underline flex items-center gap-1"
+                >
+                  <Plus size={12} /> Add Step
+                </button>
+              </div>
+
+              <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                {milestones.map((m, index) => (
+                  <div key={m.id} className="flex items-center gap-2 p-2 bg-slate-50 border border-slate-200 rounded-xl">
+                    <input
+                      type="checkbox"
+                      checked={m.isCompleted}
+                      onChange={(e) => handleMilestoneChange(index, 'isCompleted', e.target.checked)}
+                      className="w-4 h-4 text-purple-600 rounded cursor-pointer shrink-0"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Milestone action step..."
+                      value={m.title}
+                      onChange={(e) => handleMilestoneChange(index, 'title', e.target.value)}
+                      className="flex-1 text-xs px-2 py-1 border border-slate-200 rounded-lg bg-white"
+                    />
+                    <input
+                      type="date"
+                      value={m.targetDate}
+                      onChange={(e) => handleMilestoneChange(index, 'targetDate', e.target.value)}
+                      className="text-xs px-2 py-1 border border-slate-200 rounded-lg bg-white shrink-0"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveMilestone(index)}
+                      className="p-1 text-slate-400 hover:text-rose-600 rounded-md transition-colors"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">Notes / Why this matters</label>
+            <label className="block text-xs font-medium text-slate-700 mb-1">Notes & Achievements Log</label>
             <textarea
               rows={2}
+              placeholder="Record notes, accomplishments, resources, or certificates gained..."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Motivation and key milestones details..."
-              className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="w-full text-xs px-3 py-2 border border-slate-300 rounded-xl"
             />
           </div>
 
@@ -241,15 +393,16 @@ export const GoalModal: React.FC<GoalModalProps> = ({ isOpen, onClose }) => {
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-900"
+              className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm"
+              className="flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-500 rounded-xl shadow-xs transition-colors"
             >
-              Save Goal
+              <Save size={14} />
+              <span>{editingGoal ? 'Save Changes' : 'Create Goal'}</span>
             </button>
           </div>
         </form>

@@ -48,7 +48,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
       return (
         c.fullName.toLowerCase().includes(q) ||
         (c.companyName && c.companyName.toLowerCase().includes(q)) ||
-        c.email.toLowerCase().includes(q) ||
+        (c.email && c.email.toLowerCase().includes(q)) ||
         c.clientSource.toLowerCase().includes(q)
       );
     }

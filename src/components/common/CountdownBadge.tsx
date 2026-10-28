@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, AlertTriangle, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Clock, AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 interface CountdownBadgeProps {
   deadline: string; // YYYY-MM-DD or ISO string
@@ -24,10 +24,10 @@ export const CountdownBadge: React.FC<CountdownBadgeProps> = ({
     // Immediate calculation
     setTimeInfo(calculateTimeRemaining(deadline, time));
 
-    // Live tick every 5 seconds for smooth countdown
+    // Real-time 1-second ticking countdown
     const interval = setInterval(() => {
       setTimeInfo(calculateTimeRemaining(deadline, time));
-    }, 5000);
+    }, 1000);
 
     return () => clearInterval(interval);
   }, [deadline, time]);
@@ -43,18 +43,16 @@ export const CountdownBadge: React.FC<CountdownBadgeProps> = ({
     );
   }
 
-  const { isOverdue, days, hours, minutes, totalSeconds, label, urgency } = timeInfo;
+  const { isOverdue, label, urgency } = timeInfo;
 
   if (isOverdue) {
     return (
       <span
-        className={`inline-flex items-center gap-1 font-bold rounded-md border font-mono text-[11px] px-2 py-0.5 animate-pulse bg-rose-50 text-rose-700 border-rose-200 shadow-xs ${className}`}
+        className={`inline-flex items-center gap-1 font-bold rounded-md border font-mono text-[11px] px-2 py-0.5 bg-rose-50 text-rose-700 border-rose-200 shadow-2xs ${className}`}
         title={`Deadline was ${deadline}${time ? ` at ${time}` : ''}`}
       >
-        {showIcon && <AlertTriangle size={12} className="text-rose-600 shrink-0" />}
-        <span>
-          {compact ? `Overdue ${label}` : `Overdue by ${label}`}
-        </span>
+        {showIcon && <AlertTriangle size={12} className="text-rose-600 shrink-0 animate-pulse" />}
+        <span>{compact ? label : `Overdue by ${label}`}</span>
       </span>
     );
   }
@@ -62,11 +60,11 @@ export const CountdownBadge: React.FC<CountdownBadgeProps> = ({
   if (urgency === 'today') {
     return (
       <span
-        className={`inline-flex items-center gap-1 font-bold rounded-md border font-mono text-[11px] px-2 py-0.5 bg-amber-50 text-amber-800 border-amber-200 shadow-xs ${className}`}
+        className={`inline-flex items-center gap-1 font-bold rounded-md border font-mono text-[11px] px-2 py-0.5 bg-amber-50 text-amber-800 border-amber-300 shadow-2xs ${className}`}
         title={`Due today by ${time || 'end of day'}`}
       >
         {showIcon && <Clock size={12} className="text-amber-600 shrink-0" />}
-        <span>{compact ? `Due in ${label}` : `Due Today (${label} left)`}</span>
+        <span>{compact ? label : `Deadline in ${label}`}</span>
       </span>
     );
   }
@@ -74,11 +72,11 @@ export const CountdownBadge: React.FC<CountdownBadgeProps> = ({
   if (urgency === 'soon') {
     return (
       <span
-        className={`inline-flex items-center gap-1 font-semibold rounded-md border font-mono text-[11px] px-2 py-0.5 bg-orange-50 text-orange-700 border-orange-200 shadow-xs ${className}`}
+        className={`inline-flex items-center gap-1 font-semibold rounded-md border font-mono text-[11px] px-2 py-0.5 bg-orange-50 text-orange-800 border-orange-200 shadow-2xs ${className}`}
         title={`Due on ${deadline}`}
       >
         {showIcon && <Clock size={12} className="text-orange-600 shrink-0" />}
-        <span>Due Soon ({label})</span>
+        <span>Due in {label}</span>
       </span>
     );
   }
@@ -90,7 +88,7 @@ export const CountdownBadge: React.FC<CountdownBadgeProps> = ({
       title={`Due on ${deadline}`}
     >
       {showIcon && <Clock size={12} className="text-slate-500 shrink-0" />}
-      <span>{label}</span>
+      <span>In {label}</span>
     </span>
   );
 };
@@ -102,6 +100,7 @@ export function calculateTimeRemaining(deadlineStr: string, timeStr?: string) {
       days: 0,
       hours: 0,
       minutes: 0,
+      seconds: 0,
       totalSeconds: 0,
       label: 'No deadline',
       urgency: 'normal' as const,
@@ -111,50 +110,38 @@ export function calculateTimeRemaining(deadlineStr: string, timeStr?: string) {
   const now = new Date();
   let target: Date;
 
-  // If already full ISO or contains T
   if (deadlineStr.includes('T')) {
     target = new Date(deadlineStr);
   } else {
-    // Format YYYY-MM-DD
     const [year, month, day] = deadlineStr.split('-').map(Number);
     if (timeStr && timeStr.includes(':')) {
-      const [hours, minutes] = timeStr.split(':').map(Number);
-      target = new Date(year, month - 1, day, hours, minutes, 0, 0);
+      const cleanTime = timeStr.trim().split('-')[0].trim();
+      const [hours, minutes] = cleanTime.split(':').map(Number);
+      target = new Date(year, month - 1, day, hours || 0, minutes || 0, 0, 0);
     } else {
-      // End of that day (23:59:59)
       target = new Date(year, month - 1, day, 23, 59, 59, 999);
     }
   }
 
   const diffMs = target.getTime() - now.getTime();
-  const totalSeconds = Math.round(diffMs / 1000);
   const isOverdue = diffMs < 0;
 
   const absDiffMs = Math.abs(diffMs);
-  const totalMinutes = Math.floor(absDiffMs / (1000 * 60));
-  const days = Math.floor(totalMinutes / (60 * 24));
-  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
-  const minutes = totalMinutes % 60;
+  const totalSeconds = Math.floor(absDiffMs / 1000);
+  const days = Math.floor(totalSeconds / (3600 * 24));
+  const hours = Math.floor((totalSeconds % (3600 * 24)) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  const hh = String(hours).padStart(2, '0');
+  const mm = String(minutes).padStart(2, '0');
+  const ss = String(seconds).padStart(2, '0');
 
   let label = '';
-  if (isOverdue) {
-    if (days > 0) {
-      label = `${days}d ${hours}h`;
-    } else if (hours > 0) {
-      label = `${hours}h ${minutes}m`;
-    } else {
-      label = `${Math.max(1, minutes)}m`;
-    }
+  if (days > 0) {
+    label = `${days}d ${hh}h ${mm}m ${ss}s`;
   } else {
-    if (days > 1) {
-      label = `${days}d ${hours}h`;
-    } else if (days === 1) {
-      label = `1d ${hours}h`;
-    } else if (hours > 0) {
-      label = `${hours}h ${minutes}m`;
-    } else {
-      label = `${Math.max(1, minutes)}m`;
-    }
+    label = `${hh}h ${mm}m ${ss}s`;
   }
 
   let urgency: 'overdue' | 'today' | 'soon' | 'normal' = 'normal';
@@ -166,7 +153,7 @@ export function calculateTimeRemaining(deadlineStr: string, timeStr?: string) {
       target.getMonth() === now.getMonth() &&
       target.getDate() === now.getDate();
 
-    if (isSameCalendarDay || diffMs < 86400000) {
+    if (isSameCalendarDay || diffMs <= 12 * 3600 * 1000) {
       urgency = 'today';
     } else if (diffMs < 48 * 3600 * 1000) {
       urgency = 'soon';
@@ -178,6 +165,7 @@ export function calculateTimeRemaining(deadlineStr: string, timeStr?: string) {
     days,
     hours,
     minutes,
+    seconds,
     totalSeconds,
     label,
     urgency,
