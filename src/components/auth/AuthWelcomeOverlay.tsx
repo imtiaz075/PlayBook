@@ -13,7 +13,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 
 export const AuthWelcomeOverlay: React.FC = () => {
-  const { loginWithGoogle, loginWithGoogleRedirect, isLoggingIn } = useAuth();
+  const { loginWithGoogle, loginWithGoogleRedirect, loginAsLocalUser, isLoggingIn } = useAuth();
   const [authError, setAuthError] = useState<string | null>(null);
   const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const [showRedirectOption, setShowRedirectOption] = useState(false);
@@ -182,11 +182,21 @@ export const AuthWelcomeOverlay: React.FC = () => {
               type="button"
               onClick={handleRedirectSignIn}
               disabled={isBusy}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-indigo-900/60 hover:bg-indigo-900/90 text-indigo-200 hover:text-white font-medium text-xs rounded-xl border border-indigo-700/60 transition-colors cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-indigo-900/65 hover:bg-indigo-900/90 text-indigo-200 hover:text-white font-medium text-xs rounded-xl border border-indigo-700/60 transition-colors cursor-pointer"
             >
               <span>Popup Blocked? Try Direct Page Redirect →</span>
             </button>
           )}
+
+          {/* Local Mode / Offline Bypass Button for custom deployment domains */}
+          <button
+            type="button"
+            onClick={loginAsLocalUser}
+            disabled={isBusy}
+            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-medium text-xs rounded-xl border border-slate-700 transition-colors cursor-pointer"
+          >
+            <span>Continue in Local Mode (Offline Storage) →</span>
+          </button>
 
           <p className="text-[11px] text-slate-500">
             One-click sign-in using your verified Google credentials.

@@ -15,6 +15,7 @@ interface AuthContextType {
   isLoggingIn: boolean;
   loginWithGoogle: () => Promise<AuthUserProfile | null>;
   loginWithGoogleRedirect: () => Promise<void>;
+  loginAsLocalUser: () => void;
   logout: () => Promise<void>;
   syncStatus: 'idle' | 'syncing' | 'synced' | 'error';
   setSyncStatus: (status: 'idle' | 'syncing' | 'synced' | 'error') => void;
@@ -27,7 +28,14 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<AuthUserProfile | null>(null);
+  const [currentUser, setCurrentUser] = useState<AuthUserProfile | null>(() => {
+    try {
+      const stored = localStorage.getItem('freelanceos_local_user');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
@@ -42,6 +50,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .then((profile) => {
         if (profile && isMounted) {
           setCurrentUser(profile);
+          localStorage.removeItem('freelanceos_local_user');
         }
       })
       .catch((err) => {
@@ -50,16 +59,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const unsubscribe = subscribeToAuth((user) => {
       if (user) {
-        setCurrentUser({
+        const profile = {
           uid: user.uid,
           email: user.email,
           displayName: user.displayName,
           photoURL: user.photoURL,
-        });
+        };
+        setCurrentUser(profile);
+        localStorage.removeItem('freelanceos_local_user');
+        setIsAuthLoading(false);
       } else {
-        setCurrentUser(null);
+        // If no firebase user, check if local fallback user exists
+        try {
+          const storedLocal = localStorage.getItem('freelanceos_local_user');
+          if (storedLocal) {
+            setCurrentUser(JSON.parse(storedLocal));
+          }
+        } catch {}
+        setIsAuthLoading(false);
       }
-      setIsAuthLoading(false);
     });
 
     return () => {
@@ -73,6 +91,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoggingIn(true);
       const profile = await signInWithGoogle();
       setCurrentUser(profile);
+      localStorage.removeItem('freelanceos_local_user');
       setShowLoginModal(false);
       return profile;
     } catch (error: any) {
@@ -94,14 +113,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const loginAsLocalUser = () => {
+    const localProfile: AuthUserProfile = {
+      uid: 'local-user-' + Math.random().toString(36).substring(2, 9),
+      email: 'user@localworkspace.app',
+      displayName: 'Local Workspace User',
+      photoURL: null,
+    };
+    localStorage.setItem('freelanceos_local_user', JSON.stringify(localProfile));
+    setCurrentUser(localProfile);
+    setShowLoginModal(false);
+  };
+
   const logout = async () => {
     try {
       await logOut();
-      setCurrentUser(null);
-      setSyncStatus('idle');
     } catch (error) {
-      console.error('Sign-Out failed:', error);
+      console.error('Sign-Out notice:', error);
     }
+    localStorage.removeItem('freelanceos_local_user');
+    setCurrentUser(null);
+    setSyncStatus('idle');
   };
 
   return (
@@ -112,6 +144,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoggingIn,
         loginWithGoogle,
         loginWithGoogleRedirect,
+        loginAsLocalUser,
         logout,
         syncStatus,
         setSyncStatus,
