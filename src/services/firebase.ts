@@ -3,6 +3,8 @@ import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
   onAuthStateChanged,
   User as FirebaseUser,
@@ -22,6 +24,8 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 // Initialize Auth
 export const auth = getAuth(app);
 export const googleAuthProvider = new GoogleAuthProvider();
+googleAuthProvider.addScope('email');
+googleAuthProvider.addScope('profile');
 googleAuthProvider.setCustomParameters({
   prompt: 'select_account',
 });
@@ -79,6 +83,51 @@ export async function signInWithGoogle(): Promise<AuthUserProfile> {
   }
 
   return userProfile;
+}
+
+/**
+ * Sign in using Google OAuth Redirect (fallback when popups are blocked)
+ */
+export async function signInWithGoogleRedirect(): Promise<void> {
+  await signInWithRedirect(auth, googleAuthProvider);
+}
+
+/**
+ * Check and resolve any pending redirect sign-in result on page load
+ */
+export async function checkRedirectResult(): Promise<AuthUserProfile | null> {
+  try {
+    const result = await getRedirectResult(auth);
+    if (result && result.user) {
+      const user = result.user;
+      const userProfile: AuthUserProfile = {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+      };
+
+      try {
+        await setDoc(
+          doc(db, 'users', user.uid),
+          {
+            ...userProfile,
+            lastLoginAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+      } catch (err) {
+        console.error('Error saving user profile to Firestore:', err);
+      }
+
+      return userProfile;
+    }
+    return null;
+  } catch (err) {
+    console.error('Error checking redirect result:', err);
+    throw err;
+  }
 }
 
 /**

@@ -13,36 +13,72 @@ import {
 import { useAuth } from '../../context/AuthContext';
 
 export const AuthWelcomeOverlay: React.FC = () => {
-  const { loginWithGoogle, isAuthLoading } = useAuth();
+  const { loginWithGoogle, loginWithGoogleRedirect, isLoggingIn } = useAuth();
   const [authError, setAuthError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorDetails, setErrorDetails] = useState<string | null>(null);
+  const [showRedirectOption, setShowRedirectOption] = useState(false);
+  const [localSubmitting, setLocalSubmitting] = useState(false);
 
   const handleSignIn = async () => {
-    if (isSubmitting || isAuthLoading) return;
+    if (localSubmitting || isLoggingIn) return;
     setAuthError(null);
-    setIsSubmitting(true);
+    setErrorDetails(null);
+    setShowRedirectOption(false);
+    setLocalSubmitting(true);
 
     try {
       await loginWithGoogle();
       // On success, AuthProvider updates currentUser, causing this overlay to unmount automatically
     } catch (err: any) {
-      if (err.code === 'auth/popup-closed-by-user') {
+      console.error('Google Auth Error:', err);
+      const code = err?.code || '';
+      const message = err?.message || '';
+
+      if (code === 'auth/popup-closed-by-user') {
         setAuthError('Sign-in popup was closed before completion. Please try again.');
-      } else if (err.code === 'auth/popup-blocked') {
-        setAuthError('Sign-in popup was blocked by your browser. Please allow popups for this site and retry.');
-      } else if (err.code === 'auth/cancelled-popup-request') {
-        // Ignorable: user triggered another request
-      } else if (err.code === 'auth/network-request-failed') {
-        setAuthError('Network error connecting to Google. Please check your internet connection.');
+      } else if (code === 'auth/popup-blocked') {
+        setAuthError('The Google sign-in popup was blocked by your browser.');
+        setErrorDetails(
+          'Please allow popups for this site in your browser address bar, or use the direct page redirect option below.'
+        );
+        setShowRedirectOption(true);
+      } else if (code === 'auth/unauthorized-domain') {
+        const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'current domain';
+        setAuthError('Firebase Authorized Domain Notice: Domain not authorized in Firebase Console.');
+        setErrorDetails(
+          `Domain "${currentOrigin}" must be added to your Firebase project authorized domains under Authentication > Settings > Authorized Domains.`
+        );
+        setShowRedirectOption(true);
+      } else if (code === 'auth/operation-not-allowed') {
+        setAuthError('Google Sign-In is disabled for this Firebase project.');
+        setErrorDetails('Please enable the Google provider in Firebase Console > Authentication > Sign-in method.');
+      } else if (code === 'auth/network-request-failed') {
+        setAuthError('Network error connecting to Google servers. Please check your internet connection and try again.');
       } else {
-        setAuthError(err.message || 'Unable to sign in with Google. Please try again.');
+        setAuthError(`Sign-in could not be completed: ${message || code || 'Unknown error'}`);
+        setShowRedirectOption(true);
       }
     } finally {
-      setIsSubmitting(false);
+      setLocalSubmitting(false);
     }
   };
 
-  const isBusy = isSubmitting || isAuthLoading;
+  const handleRedirectSignIn = async () => {
+    if (localSubmitting || isLoggingIn) return;
+    setAuthError(null);
+    setErrorDetails(null);
+    setLocalSubmitting(true);
+
+    try {
+      await loginWithGoogleRedirect();
+    } catch (err: any) {
+      console.error('Google Redirect Error:', err);
+      setAuthError(`Redirect sign-in error: ${err?.message || 'Unable to redirect'}`);
+      setLocalSubmitting(false);
+    }
+  };
+
+  const isBusy = localSubmitting || isLoggingIn;
 
   return (
     <div
@@ -91,11 +127,16 @@ export const AuthWelcomeOverlay: React.FC = () => {
 
         {/* Error Alert if sign-in fails */}
         {authError && (
-          <div className="w-full mb-6 p-3.5 bg-rose-950/60 border border-rose-800/80 rounded-xl text-left flex items-start gap-2.5 text-xs text-rose-200 animate-in fade-in duration-200">
-            <AlertCircle size={16} className="text-rose-400 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <span className="font-semibold block">Authentication Notice</span>
-              <span className="text-rose-300 text-[11px] mt-0.5 block">{authError}</span>
+          <div className="w-full mb-6 p-4 bg-rose-950/70 border border-rose-800 rounded-xl text-left flex items-start gap-3 text-xs text-rose-200 animate-in fade-in duration-200">
+            <AlertCircle size={18} className="text-rose-400 shrink-0 mt-0.5" />
+            <div className="flex-1 space-y-1">
+              <span className="font-bold text-white block text-xs">Authentication Notice</span>
+              <p className="text-rose-200 text-xs leading-relaxed">{authError}</p>
+              {errorDetails && (
+                <div className="mt-2 p-2.5 bg-rose-900/40 rounded-lg border border-rose-800/60 font-mono text-[11px] text-rose-300 break-all leading-normal">
+                  {errorDetails}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -131,9 +172,22 @@ export const AuthWelcomeOverlay: React.FC = () => {
               </svg>
             )}
             <span className="tracking-wide">
-              {isBusy ? 'Signing in with Google...' : 'Sign in with Google'}
+              {isBusy ? 'Connecting to Google...' : 'Sign in with Google'}
             </span>
           </button>
+
+          {/* Fallback Redirect Option if Popup is Blocked or Problematic */}
+          {showRedirectOption && (
+            <button
+              type="button"
+              onClick={handleRedirectSignIn}
+              disabled={isBusy}
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-indigo-900/60 hover:bg-indigo-900/90 text-indigo-200 hover:text-white font-medium text-xs rounded-xl border border-indigo-700/60 transition-colors cursor-pointer"
+            >
+              <span>Popup Blocked? Try Direct Page Redirect →</span>
+            </button>
+          )}
+
           <p className="text-[11px] text-slate-500">
             One-click sign-in using your verified Google credentials.
           </p>

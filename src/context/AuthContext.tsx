@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import {
   auth,
   signInWithGoogle,
+  signInWithGoogleRedirect,
+  checkRedirectResult,
   logOut,
   subscribeToAuth,
   AuthUserProfile,
@@ -10,7 +12,9 @@ import {
 interface AuthContextType {
   currentUser: AuthUserProfile | null;
   isAuthLoading: boolean;
+  isLoggingIn: boolean;
   loginWithGoogle: () => Promise<AuthUserProfile | null>;
+  loginWithGoogleRedirect: () => Promise<void>;
   logout: () => Promise<void>;
   syncStatus: 'idle' | 'syncing' | 'synced' | 'error';
   setSyncStatus: (status: 'idle' | 'syncing' | 'synced' | 'error') => void;
@@ -25,11 +29,25 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<AuthUserProfile | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
+  const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
 
   useEffect(() => {
+    let isMounted = true;
+
+    // Check if returning from a redirect OAuth flow
+    checkRedirectResult()
+      .then((profile) => {
+        if (profile && isMounted) {
+          setCurrentUser(profile);
+        }
+      })
+      .catch((err) => {
+        console.error('Redirect sign-in resolution notice:', err);
+      });
+
     const unsubscribe = subscribeToAuth((user) => {
       if (user) {
         setCurrentUser({
@@ -44,21 +62,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsAuthLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   const loginWithGoogle = async () => {
     try {
-      setIsAuthLoading(true);
+      setIsLoggingIn(true);
       const profile = await signInWithGoogle();
       setCurrentUser(profile);
       setShowLoginModal(false);
       return profile;
     } catch (error: any) {
-      console.error('Google Sign-In failed:', error);
+      console.error('Google Sign-In error:', error);
       throw error;
     } finally {
-      setIsAuthLoading(false);
+      setIsLoggingIn(false);
+    }
+  };
+
+  const loginWithGoogleRedirect = async () => {
+    try {
+      setIsLoggingIn(true);
+      await signInWithGoogleRedirect();
+    } catch (error: any) {
+      console.error('Google Redirect Sign-In error:', error);
+      setIsLoggingIn(false);
+      throw error;
     }
   };
 
@@ -77,7 +109,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         currentUser,
         isAuthLoading,
+        isLoggingIn,
         loginWithGoogle,
+        loginWithGoogleRedirect,
         logout,
         syncStatus,
         setSyncStatus,
