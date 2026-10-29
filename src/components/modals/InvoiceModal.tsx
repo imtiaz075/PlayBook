@@ -24,7 +24,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   onClose,
   prefillData,
 }) => {
-  const { clients, tasks, addInvoice, settings, companyProfile } = useApp();
+  const { clients, tasks, addInvoice, settings, companyProfile, setCompanyProfileModalOpen } = useApp();
 
   const [clientId, setClientId] = useState(prefillData?.clientId || clients[0]?.id || '');
   const [projectId, setProjectId] = useState(prefillData?.projectId || '');
@@ -35,7 +35,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   );
   const [status, setStatus] = useState<InvoiceStatus>('issued');
   const [notes, setNotes] = useState('');
-  const [paymentTerms, setPaymentTerms] = useState(companyProfile?.paymentInstructions || 'Net 14');
+  const [paymentTerms, setPaymentTerms] = useState(
+    companyProfile?.paymentInstructions || companyProfile?.defaultInvoiceTerms || 'Net 14'
+  );
   const [discountRate, setDiscountRate] = useState(0);
   const [taxRate, setTaxRate] = useState(0);
 
@@ -124,6 +126,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       clientEmail: selectedClient.email,
       clientCompany: selectedClient.companyName,
       clientAddress: selectedClient.address,
+      companyProfile, // Snapshot of company issuer details
       projectId: projectId || undefined,
       projectName: tasks.find((t) => t.id === projectId)?.name,
       issueDate,
@@ -144,7 +147,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     });
 
     // Generate and download PDF immediately
-    generateInvoicePDF(newInv, settings);
+    generateInvoicePDF(newInv, settings, companyProfile);
     onClose();
   };
 
@@ -165,6 +168,44 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
+          {/* My Company / Seller Profile Banner */}
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold shrink-0 text-sm">
+                {companyProfile?.businessLogo ? (
+                  <img
+                    src={companyProfile.businessLogo}
+                    alt="Logo"
+                    className="w-full h-full object-contain p-0.5 rounded-lg"
+                  />
+                ) : (
+                  (companyProfile?.businessName || companyProfile?.fullName || 'M')[0].toUpperCase()
+                )}
+              </div>
+              <div className="min-w-0">
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">
+                  Issued By (Seller Details)
+                </span>
+                <p className="text-xs font-bold text-slate-900 truncate">
+                  {companyProfile?.businessName || companyProfile?.fullName || 'My Freelance Studio'}
+                </p>
+                <p className="text-[11px] text-slate-500 truncate">
+                  {[companyProfile?.email, companyProfile?.address, companyProfile?.taxRegistrationNumber]
+                    .filter(Boolean)
+                    .join(' · ') || 'No address configured'}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setCompanyProfileModalOpen(true)}
+              className="px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors shrink-0 cursor-pointer"
+            >
+              {companyProfile?.businessName || companyProfile?.fullName ? 'My Company' : 'Add My Company'}
+            </button>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1">Select Client *</label>

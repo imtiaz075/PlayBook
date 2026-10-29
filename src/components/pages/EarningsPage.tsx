@@ -7,6 +7,7 @@ import {
   Plus,
   RefreshCw,
   Building,
+  Building2,
   CheckCircle2,
   Clock,
   ArrowDownLeft,
@@ -38,6 +39,8 @@ export const EarningsPage: React.FC<EarningsPageProps> = ({
     setDisplayCurrency,
     ratesData,
     refreshExchangeRates,
+    companyProfile,
+    setCompanyProfileModalOpen,
   } = useApp();
 
   const [timeframe, setTimeframe] = useState<'this_month' | 'last_month' | 'all'>('this_month');
@@ -185,7 +188,19 @@ export const EarningsPage: React.FC<EarningsPageProps> = ({
           <InfoTooltip content="Real cashflow tracking, platform fee reconciliations, and payout clearances." />
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* My Company Details Button */}
+          <button
+            onClick={() => setCompanyProfileModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 rounded-lg transition-colors shadow-xs cursor-pointer"
+            title="Manage your freelancer / company profile displayed on invoices"
+          >
+            <Building2 size={14} className="text-indigo-600" />
+            <span>
+              {companyProfile?.businessName || companyProfile?.fullName ? 'My Company' : 'Add My Company'}
+            </span>
+          </button>
+
           {/* Refresh Rates */}
           <button
             onClick={handleRefreshRates}

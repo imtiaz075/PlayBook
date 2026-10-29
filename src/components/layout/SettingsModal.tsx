@@ -67,7 +67,7 @@ export const SettingsModal: React.FC = () => {
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-slate-200 px-6 gap-6 bg-slate-50/50">
+        <div className="flex border-b border-slate-200 px-6 gap-4 sm:gap-6 bg-slate-50/50 overflow-x-auto whitespace-nowrap scrollbar-none">
           {[
             { id: 'profile', label: 'Freelancer & Invoicing', icon: User },
             { id: 'fees', label: 'Platform Fees', icon: Percent },

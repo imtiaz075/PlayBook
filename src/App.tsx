@@ -22,7 +22,6 @@ import { EarningsPage } from './components/pages/EarningsPage';
 import { GoalsPage } from './components/pages/GoalsPage';
 import { BudgetPage } from './components/pages/BudgetPage';
 import { ReportsPage } from './components/pages/ReportsPage';
-import { LoginPage } from './components/pages/LoginPage';
 import { AuthModal } from './components/modals/AuthModal';
 
 // Modals
@@ -236,8 +235,6 @@ const MainAppContent: React.FC = () => {
           )}
 
           {activePage === 'reports' && <ReportsPage />}
-
-          {activePage === 'login' && <LoginPage />}
         </main>
       </div>
 

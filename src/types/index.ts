@@ -29,12 +29,18 @@ export type MeasurementMethod = 'milestones' | 'numeric_auto' | 'manual';
 
 export interface CompanyProfile {
   businessName: string;
+  fullName?: string;
   businessLogo?: string;
   address?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  country?: string;
   email?: string;
   phone?: string;
   taxRegistrationNumber?: string;
   website?: string;
+  additionalDetails?: string;
   defaultCurrency: string;
   paymentInstructions?: string;
   bankDetails?: string;
@@ -128,6 +134,7 @@ export interface Invoice {
   clientEmail?: string;
   clientCompany?: string;
   clientAddress?: string;
+  companyProfile?: CompanyProfile;
   projectId?: string;
   projectName?: string;
   issueDate: string; // YYYY-MM-DD

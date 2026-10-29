@@ -80,6 +80,7 @@ export async function signInWithGoogle(): Promise<AuthUserProfile> {
     );
   } catch (err) {
     console.error('Error saving user profile to Firestore:', err);
+    handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
   }
 
   return userProfile;
@@ -119,6 +120,7 @@ export async function checkRedirectResult(): Promise<AuthUserProfile | null> {
         );
       } catch (err) {
         console.error('Error saving user profile to Firestore:', err);
+        handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
       }
 
       return userProfile;
@@ -137,6 +139,53 @@ export async function logOut(): Promise<void> {
   await signOut(auth);
 }
 
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+export interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  };
+}
+
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData?.map((provider) => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || [],
+    },
+    operationType,
+    path,
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
 /**
  * Subscribe to Auth State Changes
  */
@@ -149,6 +198,10 @@ export function subscribeToAuth(callback: (user: FirebaseUser | null) => void) {
  */
 export async function saveUserWorkspace(userId: string, data: Record<string, any>) {
   if (!userId) return;
+  // Local mode bypass
+  if (userId.startsWith('local-user-') || !auth.currentUser) {
+    return;
+  }
   try {
     const docRef = doc(db, 'users', userId, 'workspace', 'data');
     await setDoc(
@@ -162,7 +215,7 @@ export async function saveUserWorkspace(userId: string, data: Record<string, any
     );
   } catch (error) {
     console.error(`Failed to save workspace for user ${userId}:`, error);
-    throw error;
+    handleFirestoreError(error, OperationType.WRITE, `users/${userId}/workspace/data`);
   }
 }
 
@@ -171,6 +224,10 @@ export async function saveUserWorkspace(userId: string, data: Record<string, any
  */
 export async function loadUserWorkspace(userId: string): Promise<Record<string, any> | null> {
   if (!userId) return null;
+  // Local mode bypass
+  if (userId.startsWith('local-user-') || !auth.currentUser) {
+    return null;
+  }
   try {
     const docRef = doc(db, 'users', userId, 'workspace', 'data');
     const snapshot = await getDoc(docRef);
@@ -180,6 +237,7 @@ export async function loadUserWorkspace(userId: string): Promise<Record<string, 
     return null;
   } catch (error) {
     console.error(`Failed to load workspace for user ${userId}:`, error);
+    handleFirestoreError(error, OperationType.GET, `users/${userId}/workspace/data`);
     return null;
   }
 }

@@ -19,6 +19,7 @@ import { useApp } from '../../context/AppContext';
 import { formatCurrency, convertCurrency } from '../../services/currency';
 import { WorkingHoursTimer } from '../common/WorkingHoursTimer';
 import { NeedsAttentionSection } from '../common/NeedsAttentionSection';
+import { QuoteSlider } from '../common/QuoteSlider';
 import { InfoTooltip } from '../common/Tooltip';
 
 interface DashboardPageProps {
@@ -174,41 +175,23 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* A. Daily Motivation Banner */}
-      <div className="p-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-xl shadow-xs border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-indigo-300 text-xs font-semibold tracking-wide">
-            <Sparkles size={14} className="text-amber-400" />
-            <span>
-              {new Date().toLocaleDateString('en-US', {
-                weekday: 'long',
-                month: 'long',
-                day: 'numeric',
-                year: 'numeric',
-              })}
-            </span>
+      {/* A. Animated Quote Slider Banner */}
+      <QuoteSlider
+        autoRotateIntervalMs={60000}
+        extraBadge={
+          <div className="flex items-center gap-3 shrink-0 bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-xl border border-white/10 shadow-sm">
+            <div className="text-right">
+              <span className="block text-[11px] text-indigo-200">Today's Achievements</span>
+              <span className="text-lg font-bold text-white font-mono tabular-nums">
+                {tasksCompletedToday + schedulesCompletedToday} activities
+              </span>
+            </div>
+            <div className="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-sm">
+              <CheckCircle2 size={20} />
+            </div>
           </div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white mt-1">
-            "Your consistency is building your future."
-          </h1>
-          <p className="text-xs text-slate-400 mt-1">
-            Small daily progress compounds into extraordinary freedom and client trust.
-          </p>
-        </div>
-
-        {/* Compact Daily Achievement Count */}
-        <div className="flex items-center gap-3 shrink-0 bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-lg border border-white/10">
-          <div className="text-right">
-            <span className="block text-[11px] text-indigo-200">Today's Achievements</span>
-            <span className="text-lg font-bold text-white font-mono tabular-nums">
-              {tasksCompletedToday + schedulesCompletedToday} activities
-            </span>
-          </div>
-          <div className="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-sm">
-            <CheckCircle2 size={20} />
-          </div>
-        </div>
-      </div>
+        }
+      />
 
       {/* Needs Attention Section (Strict 12-Hour Approaching Deadlines, Single Column) */}
       <NeedsAttentionSection />

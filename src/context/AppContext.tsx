@@ -1328,6 +1328,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsCloudLoaded(false);
         return;
       }
+      if (currentUser.uid.startsWith('local-user-')) {
+        setIsCloudLoaded(true);
+        setSyncStatus('idle');
+        return;
+      }
       try {
         setSyncStatus('syncing');
         const cloudData = await loadUserWorkspace(currentUser.uid);
@@ -1384,7 +1389,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Automatically save workspace changes under unique user ID
   useEffect(() => {
-    if (!currentUser?.uid || !isCloudLoaded) return;
+    if (!currentUser?.uid || currentUser.uid.startsWith('local-user-') || !isCloudLoaded) return;
 
     const timeout = setTimeout(async () => {
       try {

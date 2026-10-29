@@ -71,7 +71,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'goals', label: 'Goals', icon: Target },
     { id: 'budget', label: 'Budget', icon: PieChart },
     { id: 'reports', label: 'Reports', icon: FileBarChart },
-    { id: 'login', label: 'Account & Sync', icon: User },
   ];
 
   const handleNavClick = (id: string) => {
@@ -179,9 +178,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Account / Login Footer Card */}
       <div className="p-3 border-t border-slate-800/80">
         {currentUser ? (
-          <button
-            onClick={() => handleNavClick('login')}
-            className={`w-full flex items-center gap-2.5 p-2 rounded-lg bg-slate-800/60 hover:bg-slate-800 border border-slate-700/50 transition-colors text-left ${
+          <div
+            className={`w-full flex items-center gap-2.5 p-2 rounded-lg bg-slate-800/60 border border-slate-700/50 text-left ${
               collapsed ? 'justify-center p-1.5' : ''
             }`}
             title={`Account: ${currentUser.displayName || currentUser.email}`}
@@ -204,7 +202,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </span>
               </div>
             )}
-          </button>
+          </div>
         ) : (
           <button
             onClick={() => setShowLoginModal(true)}

@@ -68,7 +68,6 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
     goals: 'Goals',
     budget: 'Budget',
     reports: 'Reports',
-    login: 'Account & Login',
   };
 
   const availableCurrencies = ['USD', 'USDT', 'EUR', 'GBP', 'PKR', 'INR', 'BDT', 'AED', 'SAR', 'CAD', 'AUD'];
@@ -222,13 +221,13 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
                 <div className="py-1">
                   <button
                     onClick={() => {
-                      setActivePage('login');
+                      setSettingsOpen(true);
                       setUserDropdownOpen(false);
                     }}
                     className="w-full text-left px-3.5 py-2 hover:bg-slate-50 text-slate-700 flex items-center gap-2"
                   >
-                    <User size={14} className="text-indigo-600" />
-                    <span>Account & Cloud Sync Details</span>
+                    <SettingsIcon size={14} className="text-indigo-600" />
+                    <span>Account & Workspace Settings</span>
                   </button>
 
                   <button
