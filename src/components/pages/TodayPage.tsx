@@ -14,6 +14,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { formatCurrency, convertCurrency } from '../../services/currency';
 import { WorkingHoursTimer } from '../common/WorkingHoursTimer';
+import { PersonalWorkingSessionsSection } from '../common/PersonalWorkingSessionsSection';
 import { NeedsAttentionSection } from '../common/NeedsAttentionSection';
 import { CountdownBadge } from '../common/CountdownBadge';
 
@@ -43,10 +44,6 @@ export const TodayPage: React.FC<TodayPageProps> = ({
     toggleScheduleComplete,
     toggleMilestone,
     startTimer,
-    stopTimer,
-    isTimerRunning,
-    timerSeconds,
-    formatTimerTime,
     setActivePage,
   } = useApp();
 
@@ -117,30 +114,6 @@ export const TodayPage: React.FC<TodayPageProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            {/* Dedicated Today Work Timer */}
-            <div className="flex items-center gap-2.5 bg-slate-900 text-white px-3.5 py-2.5 rounded-xl shadow-xs transition-all duration-200 hover:shadow-md">
-              <Clock size={16} className={isTimerRunning ? 'text-emerald-400 animate-pulse' : 'text-slate-400'} />
-              <div className="font-mono text-sm font-bold tracking-tight">
-                {formatTimerTime(timerSeconds)}
-              </div>
-              {isTimerRunning ? (
-                <button
-                  onClick={() => stopTimer()}
-                  className="px-2.5 py-1 text-xs font-semibold bg-rose-600 hover:bg-rose-500 rounded-lg transition-colors"
-                >
-                  Stop
-                </button>
-              ) : (
-                <button
-                  onClick={() => startTimer()}
-                  className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors"
-                >
-                  <Play size={12} fill="currentColor" />
-                  <span>Start</span>
-                </button>
-              )}
-            </div>
-
             <div className="flex items-center gap-4 bg-slate-50 p-2.5 px-3.5 rounded-xl border border-slate-200">
               <div>
                 <div className="flex items-center justify-between text-xs gap-4 mb-1">
@@ -208,6 +181,9 @@ export const TodayPage: React.FC<TodayPageProps> = ({
 
       {/* Working Hours Timer (Daily Workday & Break Interval Manager) */}
       <WorkingHoursTimer />
+
+      {/* Dedicated Personal Working Sessions Log */}
+      <PersonalWorkingSessionsSection />
 
       {/* C. Separate Overdue Items Section */}
       {overdueTasks.length > 0 && (

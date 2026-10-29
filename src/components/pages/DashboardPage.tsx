@@ -57,6 +57,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     dismissAttentionItem,
     workdayHistory,
     workdayState,
+    getPersonalDailyTotalSeconds,
   } = useApp();
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -136,19 +137,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     const d = new Date(now.getTime() - (6 - i) * 86400000);
     const dateStr = d.toISOString().split('T')[0];
 
-    let totalSecs = workdayHistory
-      .filter((wh) => wh.date === dateStr)
-      .reduce((s, wh) => s + wh.activeWorkSeconds, 0);
-
-    if (dateStr === todayStr) {
-      if (workdayState.status === 'working' && workdayState.currentIntervalStartTime) {
-        totalSecs += workdayState.accumulatedWorkSeconds + Math.floor((now.getTime() - workdayState.currentIntervalStartTime) / 1000);
-      } else if (workdayState.status !== 'completed' && workdayState.status !== 'idle') {
-        totalSecs += workdayState.accumulatedWorkSeconds;
-      }
-    }
-
-    const dayHours = totalSecs / 3600;
+    const personalSecs = getPersonalDailyTotalSeconds(dateStr);
+    const dayHours = personalSecs / 3600;
     return {
       dayName: d.toLocaleDateString('en-US', { weekday: 'short' }),
       date: dateStr,

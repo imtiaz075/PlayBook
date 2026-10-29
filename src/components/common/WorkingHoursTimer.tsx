@@ -12,6 +12,8 @@ import {
   AlertCircle,
   Square,
   FastForward,
+  ArrowRight,
+  Calendar,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { InfoTooltip } from './Tooltip';
@@ -27,6 +29,10 @@ export const WorkingHoursTimer: React.FC = () => {
     skipBreak,
     endWorkday,
     updateWorkdayConfig,
+    personalSessions,
+    activePersonalSession,
+    getPersonalDailyTotalSeconds,
+    setActivePage,
   } = useApp();
 
   const [configOpen, setConfigOpen] = useState(false);
@@ -41,7 +47,7 @@ export const WorkingHoursTimer: React.FC = () => {
   );
   const [showSkipBreakModal, setShowSkipBreakModal] = useState(false);
 
-  // Live timer tick for UI synchronization
+  // Live timer tick every second for real-time second-by-second updates
   const [, setTick] = useState(0);
   useEffect(() => {
     if (workdayState.status === 'working' || workdayState.status === 'on_break') {
@@ -53,14 +59,19 @@ export const WorkingHoursTimer: React.FC = () => {
   }, [workdayState.status]);
 
   const now = Date.now();
+  const todayStr = new Date().toISOString().split('T')[0];
 
-  // 1. Calculate Active Work Seconds
-  let activeWorkSeconds = workdayState.accumulatedWorkSeconds;
-  if (workdayState.status === 'working' && workdayState.currentIntervalStartTime) {
-    activeWorkSeconds += Math.max(0, Math.floor((now - workdayState.currentIntervalStartTime) / 1000));
-  }
+  // 1. Calculate Today's Total Personal Working Time (Completed sessions + active running session)
+  const todayTotalPersonalSeconds = getPersonalDailyTotalSeconds(todayStr);
 
-  // 2. Calculate Total Break Seconds
+  // 2. Current Active Session Elapsed Time
+  const currentSessionElapsedSeconds = activePersonalSession
+    ? Math.max(0, Math.floor((now - activePersonalSession.startTimestamp) / 1000))
+    : workdayState.status === 'working' && workdayState.currentIntervalStartTime
+    ? Math.max(0, Math.floor((now - workdayState.currentIntervalStartTime) / 1000))
+    : 0;
+
+  // 3. Calculate Total Break Seconds
   let breakSeconds = workdayState.accumulatedBreakSeconds;
   let currentBreakElapsedSeconds = 0;
   if (workdayState.status === 'on_break' && workdayState.currentBreakStartTime) {
@@ -68,26 +79,30 @@ export const WorkingHoursTimer: React.FC = () => {
     breakSeconds += currentBreakElapsedSeconds;
   }
 
-  // 3. Calculate Total Elapsed Workday Duration
+  // 4. Calculate Total Elapsed Workday Duration
   let totalElapsedSeconds = 0;
   if (workdayState.workdayStartTime) {
     if (workdayState.status === 'completed' || workdayState.status === 'idle') {
-      totalElapsedSeconds = workdayState.accumulatedWorkSeconds + workdayState.accumulatedBreakSeconds;
+      totalElapsedSeconds = todayTotalPersonalSeconds + breakSeconds;
     } else {
       totalElapsedSeconds = Math.max(0, Math.floor((now - workdayState.workdayStartTime) / 1000));
     }
   }
 
-  // 4. Progress towards target work interval
+  // 5. Progress towards target work interval
   const targetWorkSec = workdayState.targetWorkMinutes * 60;
-  const workProgressPct = targetWorkSec > 0 ? Math.min(100, Math.round((activeWorkSeconds / targetWorkSec) * 100)) : 0;
-  const isWorkTargetCompleted = activeWorkSeconds >= targetWorkSec && targetWorkSec > 0;
+  const workProgressPct = targetWorkSec > 0 ? Math.min(100, Math.round((todayTotalPersonalSeconds / targetWorkSec) * 100)) : 0;
+  const isWorkTargetCompleted = todayTotalPersonalSeconds >= targetWorkSec && targetWorkSec > 0;
 
-  // 5. Break calculations
+  // 6. Break calculations
   const targetBreakSec = workdayState.targetBreakMinutes * 60;
   const remainingBreakSec = targetBreakSec - currentBreakElapsedSeconds;
   const isBreakOverdue = remainingBreakSec < 0;
   const breakOverdueSec = Math.abs(remainingBreakSec);
+
+  // Filter today's personal sessions for the short overview list
+  const todaySessions = personalSessions.filter((s) => s.date === todayStr);
+  const recentSessions = todaySessions.slice(0, 3);
 
   const formatHms = (totalSec: number) => {
     const hrs = Math.floor(totalSec / 3600);
@@ -127,51 +142,44 @@ export const WorkingHoursTimer: React.FC = () => {
             <Clock size={16} />
           </div>
           <div className="flex items-center gap-1.5">
-            <h3 className="text-sm font-bold text-slate-900 tracking-tight">Working Hours Timer</h3>
-            <InfoTooltip content="Manage daily freelance hours, track active focus sessions vs breaks, and take structured recovery intervals." />
+            <h3 className="text-sm font-bold text-slate-900 tracking-tight">Personal Working Hours Timer</h3>
+            <InfoTooltip content="Dedicated personal productivity timer. Tracks individual working sessions and daily focus time independently of client billing." />
           </div>
         </div>
 
-        {/* Status Badge & Settings Toggle */}
+        {/* Clear Status Badges & Target Setting Toggle */}
         <div className="flex items-center gap-2">
-          {workdayState.status === 'working' && (
+          {workdayState.status === 'working' ? (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-2xs">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-              <span>Working</span>
+              <span>Timer Running</span>
             </span>
-          )}
-
-          {workdayState.status === 'on_break' && (
+          ) : workdayState.status === 'on_break' ? (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200 shadow-2xs">
               <Coffee size={13} className="text-amber-600 animate-bounce" />
               <span>On Break</span>
             </span>
-          )}
-
-          {workdayState.status === 'paused' && (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-200 text-slate-700 border border-slate-300">
+          ) : workdayState.status === 'paused' ? (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
               <Pause size={12} />
-              <span>Paused</span>
+              <span>Timer Paused</span>
             </span>
-          )}
-
-          {workdayState.status === 'completed' && (
+          ) : workdayState.status === 'completed' ? (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-200">
               <CheckCircle2 size={13} className="text-purple-600" />
               <span>Workday Completed</span>
             </span>
-          )}
-
-          {workdayState.status === 'idle' && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
-              <span>Not Started</span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+              <span className="w-2 h-2 rounded-full bg-slate-400" />
+              <span>Timer Stopped</span>
             </span>
           )}
 
           {/* Config Button */}
           <button
             onClick={() => setConfigOpen((prev) => !prev)}
-            className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 rounded-lg transition-colors border border-slate-200"
+            className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 rounded-lg transition-colors border border-slate-200 cursor-pointer"
             title="Configure target intervals"
           >
             <Settings size={13} />
@@ -208,7 +216,7 @@ export const WorkingHoursTimer: React.FC = () => {
                     <button
                       key={p.val}
                       onClick={() => handleApplyConfig(p.val, workdayState.targetBreakMinutes)}
-                      className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                      className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
                         workdayState.targetWorkMinutes === p.val
                           ? 'bg-indigo-600 text-white font-semibold shadow-xs'
                           : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
@@ -234,7 +242,7 @@ export const WorkingHoursTimer: React.FC = () => {
                     <button
                       key={b.val}
                       onClick={() => handleApplyConfig(workdayState.targetWorkMinutes, b.val)}
-                      className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                      className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
                         workdayState.targetBreakMinutes === b.val
                           ? 'bg-amber-600 text-white font-semibold shadow-xs'
                           : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
@@ -248,49 +256,49 @@ export const WorkingHoursTimer: React.FC = () => {
             </div>
 
             {/* Custom Inputs */}
-            <form onSubmit={handleApplyCustomConfig} className="pt-2 border-t border-slate-200 flex flex-wrap items-center gap-3">
-              <span className="text-xs font-medium text-slate-600">Custom Target:</span>
-              <div className="flex items-center gap-1.5">
+            <form onSubmit={handleApplyCustomConfig} className="pt-2 border-t border-slate-200/80 flex flex-wrap items-center gap-3">
+              <span className="text-xs font-semibold text-slate-700">Custom Target:</span>
+              <div className="flex items-center gap-1.5 text-xs">
                 <input
                   type="number"
                   min="0"
                   max="24"
                   value={customWorkHours}
                   onChange={(e) => setCustomWorkHours(e.target.value)}
-                  className="w-14 text-xs font-mono px-2 py-1 bg-white border border-slate-200 rounded-md"
-                  placeholder="Hrs"
+                  className="w-14 px-2 py-1 bg-white border border-slate-300 rounded text-center font-mono"
                 />
-                <span className="text-xs text-slate-500">h</span>
+                <span className="text-slate-500">hours</span>
+              </div>
+
+              <div className="flex items-center gap-1.5 text-xs">
                 <input
                   type="number"
                   min="0"
                   max="59"
                   value={customWorkMinutes}
                   onChange={(e) => setCustomWorkMinutes(e.target.value)}
-                  className="w-14 text-xs font-mono px-2 py-1 bg-white border border-slate-200 rounded-md"
-                  placeholder="Min"
+                  className="w-14 px-2 py-1 bg-white border border-slate-300 rounded text-center font-mono"
                 />
-                <span className="text-xs text-slate-500">m work</span>
+                <span className="text-slate-500">mins work</span>
               </div>
 
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 text-xs">
                 <input
                   type="number"
-                  min="5"
-                  max="240"
+                  min="1"
+                  max="180"
                   value={customBreakMinutes}
                   onChange={(e) => setCustomBreakMinutes(e.target.value)}
-                  className="w-14 text-xs font-mono px-2 py-1 bg-white border border-slate-200 rounded-md"
-                  placeholder="Min"
+                  className="w-14 px-2 py-1 bg-white border border-slate-300 rounded text-center font-mono"
                 />
-                <span className="text-xs text-slate-500">m break</span>
+                <span className="text-slate-500">mins break</span>
               </div>
 
               <button
                 type="submit"
-                className="px-3 py-1 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-md transition-colors"
+                className="px-3 py-1 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded transition-colors ml-auto cursor-pointer"
               >
-                Apply Custom
+                Apply Custom Target
               </button>
             </form>
           </div>
@@ -302,22 +310,45 @@ export const WorkingHoursTimer: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
           {/* Section 1: Main Numbers & Progress (Cols 1-7) */}
           <div className="lg:col-span-7 space-y-4">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <div>
-                <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold">
-                  {workdayState.status === 'on_break' ? 'Break Time Elapsed' : 'Active Working Time'}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Today's Total Personal Working Time */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                <span className="text-[11px] text-slate-500 uppercase tracking-wider font-bold block">
+                  Today's Total Working Time
                 </span>
-                <div className="text-3xl sm:text-4xl font-bold font-mono tracking-tight text-slate-900 tabular-nums">
-                  {workdayState.status === 'on_break' ? formatHms(breakSeconds) : formatHms(activeWorkSeconds)}
+                <div className="text-2xl sm:text-3xl font-bold font-mono tracking-tight text-indigo-600 tabular-nums mt-0.5">
+                  {formatHms(todayTotalPersonalSeconds)}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
+                  <span>{todaySessions.length} session{todaySessions.length === 1 ? '' : 's'} recorded</span>
+                  {workdayState.status === 'working' && (
+                    <span className="text-emerald-600 font-semibold">(live accumulating)</span>
+                  )}
                 </div>
               </div>
 
-              <div className="text-right">
-                <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold">
-                  Total Workday Elapsed
-                </span>
-                <div className="text-lg font-bold font-mono tracking-tight text-slate-700 tabular-nums">
-                  {formatHms(totalElapsedSeconds)}
+              {/* Current Session Elapsed Time */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-slate-500 uppercase tracking-wider font-bold block">
+                    Current Session
+                  </span>
+                  {workdayState.status === 'working' && (
+                    <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      In progress
+                    </span>
+                  )}
+                </div>
+                <div className="text-2xl sm:text-3xl font-bold font-mono tracking-tight text-slate-900 tabular-nums mt-0.5">
+                  {workdayState.status === 'working' ? formatHms(currentSessionElapsedSeconds) : '00:00:00'}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-1">
+                  {workdayState.status === 'working' && activePersonalSession
+                    ? `Started at ${activePersonalSession.startTime}`
+                    : workdayState.status === 'on_break'
+                    ? `Break elapsed: ${formatHms(breakSeconds)}`
+                    : 'Timer is ready to start'}
                 </div>
               </div>
             </div>
@@ -326,10 +357,11 @@ export const WorkingHoursTimer: React.FC = () => {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-slate-600 font-medium">
-                  Work Interval Target ({Math.floor(workdayState.targetWorkMinutes / 60)}h {workdayState.targetWorkMinutes % 60 ? `${workdayState.targetWorkMinutes % 60}m` : ''})
+                  Work Interval Target ({Math.floor(workdayState.targetWorkMinutes / 60)}h{' '}
+                  {workdayState.targetWorkMinutes % 60 ? `${workdayState.targetWorkMinutes % 60}m` : ''})
                 </span>
                 <span className="font-mono tabular-nums font-bold text-slate-900">
-                  {workProgressPct}% ({Math.floor(activeWorkSeconds / 60)}m / {workdayState.targetWorkMinutes}m)
+                  {workProgressPct}% ({Math.floor(todayTotalPersonalSeconds / 60)}m / {workdayState.targetWorkMinutes}m)
                 </span>
               </div>
 
@@ -349,11 +381,13 @@ export const WorkingHoursTimer: React.FC = () => {
 
             {/* Break Countdown Status when on Break */}
             {workdayState.status === 'on_break' && (
-              <div className={`p-3 rounded-lg border flex items-center justify-between ${
-                isBreakOverdue
-                  ? 'bg-rose-50 border-rose-200 text-rose-800'
-                  : 'bg-amber-50 border-amber-200 text-amber-800'
-              }`}>
+              <div
+                className={`p-3 rounded-lg border flex items-center justify-between ${
+                  isBreakOverdue
+                    ? 'bg-rose-50 border-rose-200 text-rose-800'
+                    : 'bg-amber-50 border-amber-200 text-amber-800'
+                }`}
+              >
                 <div className="flex items-center gap-2">
                   <Coffee size={16} className={isBreakOverdue ? 'text-rose-600' : 'text-amber-600'} />
                   <div>
@@ -381,10 +415,10 @@ export const WorkingHoursTimer: React.FC = () => {
             {workdayState.status === 'idle' && (
               <button
                 onClick={startWorkday}
-                className="w-full flex items-center justify-center gap-2 px-5 py-3 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-sm hover:shadow-md"
+                className="w-full flex items-center justify-center gap-2 px-5 py-3 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer"
               >
                 <Play size={18} fill="currentColor" />
-                <span>Start Workday</span>
+                <span>Start Personal Timer</span>
               </button>
             )}
 
@@ -393,7 +427,7 @@ export const WorkingHoursTimer: React.FC = () => {
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={startBreak}
-                    className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-xl transition-colors"
+                    className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-xl transition-colors cursor-pointer"
                   >
                     <Coffee size={15} />
                     <span>Take Break</span>
@@ -401,7 +435,7 @@ export const WorkingHoursTimer: React.FC = () => {
 
                   <button
                     onClick={pauseWorkday}
-                    className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+                    className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
                   >
                     <Pause size={15} />
                     <span>Pause</span>
@@ -410,10 +444,10 @@ export const WorkingHoursTimer: React.FC = () => {
 
                 <button
                   onClick={endWorkday}
-                  className="w-full flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-rose-700 hover:text-rose-800 hover:bg-rose-50 border border-rose-200 rounded-xl transition-colors"
+                  className="w-full flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-rose-700 hover:text-rose-800 hover:bg-rose-50 border border-rose-200 rounded-xl transition-colors cursor-pointer"
                 >
                   <Square size={14} />
-                  <span>End Workday</span>
+                  <span>End Workday & Finalize</span>
                 </button>
               </div>
             )}
@@ -422,16 +456,16 @@ export const WorkingHoursTimer: React.FC = () => {
               <div className="space-y-2">
                 <button
                   onClick={resumeFromBreak}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all shadow-sm"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all shadow-sm cursor-pointer"
                 >
                   <Play size={16} fill="currentColor" />
-                  <span>Resume Work</span>
+                  <span>Resume Work Session</span>
                 </button>
 
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => setShowSkipBreakModal(true)}
-                    className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+                    className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
                   >
                     <FastForward size={14} />
                     <span>Skip Break</span>
@@ -439,7 +473,7 @@ export const WorkingHoursTimer: React.FC = () => {
 
                   <button
                     onClick={pauseWorkday}
-                    className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+                    className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
                   >
                     <Pause size={14} />
                     <span>Pause</span>
@@ -448,8 +482,9 @@ export const WorkingHoursTimer: React.FC = () => {
 
                 <button
                   onClick={endWorkday}
-                  className="w-full flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                  className="w-full flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-rose-700 hover:text-rose-800 hover:bg-rose-50 border border-rose-200 rounded-xl transition-colors cursor-pointer"
                 >
+                  <Square size={14} />
                   <span>End Workday</span>
                 </button>
               </div>
@@ -459,15 +494,15 @@ export const WorkingHoursTimer: React.FC = () => {
               <div className="space-y-2">
                 <button
                   onClick={resumeWorkday}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-sm"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-sm cursor-pointer"
                 >
                   <Play size={16} fill="currentColor" />
-                  <span>Resume</span>
+                  <span>Resume Session</span>
                 </button>
 
                 <button
                   onClick={endWorkday}
-                  className="w-full flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-rose-700 hover:text-rose-800 hover:bg-rose-50 border border-rose-200 rounded-xl transition-colors"
+                  className="w-full flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-rose-700 hover:text-rose-800 hover:bg-rose-50 border border-rose-200 rounded-xl transition-colors cursor-pointer"
                 >
                   <Square size={14} />
                   <span>End Workday</span>
@@ -479,21 +514,90 @@ export const WorkingHoursTimer: React.FC = () => {
               <div className="space-y-2">
                 <button
                   onClick={startWorkday}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-sm"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-sm cursor-pointer"
                 >
                   <RotateCcw size={15} />
-                  <span>Start New Workday</span>
+                  <span>Start New Working Session</span>
                 </button>
               </div>
             )}
 
             {/* Quick Stats Line */}
             <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
-              <span>{workdayState.workSessionsCount} session{workdayState.workSessionsCount === 1 ? '' : 's'}</span>
+              <span>{todaySessions.length} session{todaySessions.length === 1 ? '' : 's'} today</span>
               <span>{workdayState.breaksCount} break{workdayState.breaksCount === 1 ? '' : 's'}</span>
-              <span>Break Time: {Math.floor(breakSeconds / 60)}m</span>
+              <span>Total Break: {Math.floor(breakSeconds / 60)}m</span>
             </div>
           </div>
+        </div>
+
+        {/* Section 3: Recent Personal Working Sessions Overview & Navigation to Today Page */}
+        <div className="mt-5 pt-4 border-t border-slate-100">
+          <div className="flex items-center justify-between mb-2.5">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-800">Recent Personal Working Sessions (Today)</span>
+              <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-mono font-semibold">
+                {todaySessions.length}
+              </span>
+            </div>
+
+            <button
+              onClick={() => setActivePage('today')}
+              className="flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer"
+            >
+              <span>View Full History on Today Page</span>
+              <ArrowRight size={13} />
+            </button>
+          </div>
+
+          {todaySessions.length === 0 ? (
+            <div className="p-3 bg-slate-50 rounded-lg text-center text-xs text-slate-500">
+              No personal working sessions recorded today yet. Click <span className="font-semibold text-indigo-600">Start Personal Timer</span> above to begin your first focus block.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {recentSessions.map((session, idx) => {
+                const isSessionRunning = session.status === 'in_progress';
+                const duration = isSessionRunning
+                  ? Math.max(0, Math.floor((now - session.startTimestamp) / 1000))
+                  : session.durationSeconds;
+
+                return (
+                  <div
+                    key={session.id}
+                    className={`p-2.5 rounded-lg border text-xs flex flex-col justify-between ${
+                      isSessionRunning
+                        ? 'bg-emerald-50/70 border-emerald-200'
+                        : 'bg-slate-50 border-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-semibold text-slate-800">
+                        Session #{todaySessions.length - idx}
+                      </span>
+                      {isSessionRunning ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded-full">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          In Progress
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-medium text-slate-500 bg-white px-1.5 py-0.2 rounded border border-slate-200">
+                          Completed
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="text-[11px] text-slate-500 flex items-center justify-between">
+                      <span>{session.startTime} → {session.endTime || 'Now'}</span>
+                      <span className="font-mono font-bold text-slate-800 tabular-nums">
+                        {formatHms(duration)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Work Interval Complete Banner */}
@@ -502,13 +606,13 @@ export const WorkingHoursTimer: React.FC = () => {
             <div className="flex items-center gap-2 text-emerald-900 text-xs">
               <Sparkles size={16} className="text-emerald-600 shrink-0" />
               <div>
-                <span className="font-bold">Your work interval is complete!</span>
-                <span className="ml-1 text-emerald-800">Time to take a break and recharge.</span>
+                <span className="font-bold">Your work interval target is reached!</span>
+                <span className="ml-1 text-emerald-800">Great focus today. Time for a recovery break.</span>
               </div>
             </div>
             <button
               onClick={startBreak}
-              className="px-3.5 py-1.5 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg transition-colors shadow-2xs shrink-0"
+              className="px-3.5 py-1.5 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg transition-colors shadow-2xs shrink-0 cursor-pointer"
             >
               Start Break ({workdayState.targetBreakMinutes}m)
             </button>
@@ -527,7 +631,7 @@ export const WorkingHoursTimer: React.FC = () => {
             <div className="mt-4 flex items-center justify-end gap-2">
               <button
                 onClick={() => setShowSkipBreakModal(false)}
-                className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-800"
+                className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-800 cursor-pointer"
               >
                 Cancel
               </button>
@@ -536,7 +640,7 @@ export const WorkingHoursTimer: React.FC = () => {
                   skipBreak();
                   setShowSkipBreakModal(false);
                 }}
-                className="px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
+                className="px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors cursor-pointer"
               >
                 Yes, Skip Break
               </button>

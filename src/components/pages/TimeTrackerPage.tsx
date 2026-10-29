@@ -28,20 +28,11 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
   onOpenManualTimeModal,
 }) => {
   const {
-    activeTimer,
-    elapsedSeconds,
-    startTimer,
-    pauseTimer,
-    resumeTimer,
-    stopTimer,
     timeEntries,
     deleteTimeEntry,
-    tasks,
-    clients,
   } = useApp();
 
   const [dateFilter, setDateFilter] = useState<'today' | 'week' | 'month' | 'all'>('month');
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
   const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
 
@@ -90,22 +81,6 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
     }
     return days;
   }, [timeEntries]);
-
-  // Active Timer formatting
-  const formatTimerClock = (secs: number) => {
-    const hrs = Math.floor(secs / 3600);
-    const mins = Math.floor((secs % 3600) / 60);
-    const s = secs % 60;
-    return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
-
-  const handleStartTimerFromDropdown = () => {
-    if (selectedProjectId) {
-      startTimer(selectedProjectId);
-    } else {
-      startTimer();
-    }
-  };
 
   const confirmDelete = () => {
     if (deletingEntryId) {
@@ -238,108 +213,7 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
         </div>
       </div>
 
-      {/* B. Active Timer Interactive Console */}
-      <div className="p-6 bg-slate-900 text-white rounded-xl shadow-md border border-slate-800 transition-all duration-200 hover:shadow-lg">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <span
-                className={`w-2.5 h-2.5 rounded-full ${
-                  activeTimer.isRunning
-                    ? activeTimer.isPaused
-                      ? 'bg-amber-400'
-                      : 'bg-emerald-400 animate-pulse'
-                    : 'bg-slate-600'
-                }`}
-              />
-              <span className="text-xs font-semibold tracking-wide uppercase text-slate-400">
-                {activeTimer.isRunning
-                  ? activeTimer.isPaused
-                    ? 'Timer Paused'
-                    : 'Recording Live Focus Session'
-                  : 'Ready to Track Focus Work'}
-              </span>
-            </div>
 
-            <div className="flex items-baseline gap-4">
-              <span className="text-4xl sm:text-5xl font-bold font-mono tabular-nums text-white tracking-tight">
-                {formatTimerClock(elapsedSeconds)}
-              </span>
-              {activeTimer.isRunning && (
-                <div className="text-xs text-emerald-400 font-mono">
-                  Billable Value:{' '}
-                  <span className="font-bold text-sm">
-                    {formatCurrency((elapsedSeconds / 3600) * (activeTimer.hourlyRate || 50), 'USD')}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {activeTimer.isRunning ? (
-              <p className="text-xs text-slate-300">
-                Project: <strong className="text-white">{activeTimer.projectName}</strong> ({activeTimer.clientName})
-              </p>
-            ) : (
-              <div className="flex items-center gap-2 pt-1">
-                <select
-                  value={selectedProjectId}
-                  onChange={(e) => setSelectedProjectId(e.target.value)}
-                  className="px-3 py-1.5 text-xs bg-slate-800 border border-slate-700 text-white rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                >
-                  <option value="">Select Project / Task to track...</option>
-                  {tasks
-                    .filter((t) => t.status !== 'completed' && t.status !== 'cancelled')
-                    .map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name} ({t.clientName})
-                      </option>
-                    ))}
-                </select>
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 self-start md:self-auto">
-            {activeTimer.isRunning ? (
-              <>
-                {activeTimer.isPaused ? (
-                  <button
-                    onClick={resumeTimer}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-colors shadow-xs"
-                  >
-                    <Play size={14} fill="currentColor" />
-                    <span>Resume</span>
-                  </button>
-                ) : (
-                  <button
-                    onClick={pauseTimer}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-lg transition-colors shadow-xs"
-                  >
-                    <Pause size={14} fill="currentColor" />
-                    <span>Pause</span>
-                  </button>
-                )}
-
-                <button
-                  onClick={stopTimer}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg transition-colors shadow-xs"
-                >
-                  <Square size={14} fill="currentColor" />
-                  <span>Stop & Save Session</span>
-                </button>
-              </>
-            ) : (
-              <button
-                onClick={handleStartTimerFromDropdown}
-                className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition-all shadow-md hover:scale-102"
-              >
-                <Play size={15} fill="currentColor" />
-                <span>Start Live Timer</span>
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
 
       {/* C. Time Entries Table */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden transition-all duration-200 hover:shadow-md hover:border-slate-300">

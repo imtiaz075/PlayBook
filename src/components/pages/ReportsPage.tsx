@@ -34,6 +34,11 @@ export const ReportsPage: React.FC = () => {
     settings,
     workdayHistory,
     workdayState,
+    personalSessions,
+    getPersonalDailyTotalSeconds,
+    getPersonalWeeklyTotalSeconds,
+    getPersonalMonthlyTotalSeconds,
+    calculateSessionSecondsForDay,
   } = useApp();
 
   const [selectedMonth, setSelectedMonth] = useState<string>(
@@ -177,34 +182,55 @@ export const ReportsPage: React.FC = () => {
     return list;
   }, [payments, expenses, tasks, timeEntries, displayCurrency, ratesData.rates]);
 
-  // 3b. Monthly Personal Working Hours Calculations (Built strictly from personal work sessions in workdayHistory)
+  // 3b. Monthly Personal Working Hours Calculations (Built strictly from personal work sessions)
   const todayStr = new Date().toISOString().split('T')[0];
+
+  const currentWeekTotalSeconds = useMemo(() => {
+    return getPersonalWeeklyTotalSeconds(new Date());
+  }, [getPersonalWeeklyTotalSeconds, personalSessions]);
+
+  const todayTotalSeconds = useMemo(() => {
+    return getPersonalDailyTotalSeconds(todayStr);
+  }, [getPersonalDailyTotalSeconds, todayStr, personalSessions]);
 
   const personalDaysInMonth = useMemo(() => {
     const [year, month] = selectedMonth.split('-').map(Number);
     const dateCount = new Date(year, month, 0).getDate();
+    const nowTs = Date.now();
 
     return Array.from({ length: dateCount }, (_, i) => {
       const dayNum = i + 1;
       const dayStr = `${selectedMonth}-${String(dayNum).padStart(2, '0')}`;
 
-      const historyEntries = workdayHistory.filter((wh) => wh.date === dayStr);
-      let activeSecs = historyEntries.reduce((s, wh) => s + wh.activeWorkSeconds, 0);
-      let breakSecs = historyEntries.reduce((s, wh) => s + wh.totalBreakSeconds, 0);
-      let sessions = historyEntries.reduce((s, wh) => s + (wh.sessionsCount || 1), 0);
+      // Calculate total active seconds from personalSessions for this specific calendar day
+      let activeSecs = 0;
+      let sessionCount = 0;
 
-      if (dayStr === todayStr) {
-        if (workdayState.status === 'working' && workdayState.currentIntervalStartTime) {
-          activeSecs += workdayState.accumulatedWorkSeconds + Math.max(0, Math.floor((Date.now() - workdayState.currentIntervalStartTime) / 1000));
-          sessions = Math.max(sessions, workdayState.workSessionsCount || 1);
-        } else if (workdayState.status === 'on_break' && workdayState.currentBreakStartTime) {
-          activeSecs += workdayState.accumulatedWorkSeconds;
-          breakSecs += workdayState.accumulatedBreakSeconds + Math.max(0, Math.floor((Date.now() - workdayState.currentBreakStartTime) / 1000));
-          sessions = Math.max(sessions, workdayState.workSessionsCount || 1);
-        } else if (workdayState.status !== 'completed' && workdayState.status !== 'idle') {
-          activeSecs += workdayState.accumulatedWorkSeconds;
-          breakSecs += workdayState.accumulatedBreakSeconds;
+      personalSessions.forEach((s) => {
+        const secs = calculateSessionSecondsForDay(s, dayStr, nowTs);
+        if (secs > 0) {
+          activeSecs += secs;
+          sessionCount += 1;
         }
+      });
+
+      // If no personalSessions exist for this past date, fallback to legacy workdayHistory if present
+      if (sessionCount === 0) {
+        const historyEntries = workdayHistory.filter((wh) => wh.date === dayStr);
+        const legacySecs = historyEntries.reduce((s, wh) => s + wh.activeWorkSeconds, 0);
+        if (legacySecs > 0) {
+          activeSecs = legacySecs;
+          sessionCount = historyEntries.reduce((s, wh) => s + (wh.sessionsCount || 1), 0);
+        }
+      }
+
+      // Legacy breaks from history if any
+      const historyEntries = workdayHistory.filter((wh) => wh.date === dayStr);
+      let breakSecs = historyEntries.reduce((s, wh) => s + wh.totalBreakSeconds, 0);
+      if (dayStr === todayStr && workdayState.status === 'on_break' && workdayState.currentBreakStartTime) {
+        breakSecs += workdayState.accumulatedBreakSeconds + Math.max(0, Math.floor((nowTs - workdayState.currentBreakStartTime) / 1000));
+      } else if (dayStr === todayStr && workdayState.status !== 'completed' && workdayState.status !== 'idle') {
+        breakSecs += workdayState.accumulatedBreakSeconds;
       }
 
       return {
@@ -214,11 +240,11 @@ export const ReportsPage: React.FC = () => {
         activeWorkSeconds: activeSecs,
         breakHours: Number((breakSecs / 3600).toFixed(1)),
         breakSeconds: breakSecs,
-        sessionsCount: sessions,
+        sessionsCount: sessionCount,
         hasActivity: activeSecs > 0 || breakSecs > 0,
       };
     });
-  }, [selectedMonth, workdayHistory, workdayState, todayStr]);
+  }, [selectedMonth, personalSessions, calculateSessionSecondsForDay, workdayHistory, workdayState, todayStr]);
 
   const personalWorkSummary = useMemo(() => {
     const totalActiveSecs = personalDaysInMonth.reduce((s, d) => s + d.activeWorkSeconds, 0);
@@ -245,6 +271,17 @@ export const ReportsPage: React.FC = () => {
       peakDayHours: peakDay && peakDay.activeWorkSeconds > 0 ? peakDay.activeWorkHours : 0,
     };
   }, [personalDaysInMonth]);
+
+  // Saved personal work sessions for the selected month for underlying session inspection
+  const monthPersonalSessions = useMemo(() => {
+    return personalSessions
+      .filter((s) => {
+        if (s.date.startsWith(selectedMonth)) return true;
+        const startIso = new Date(s.startTimestamp).toISOString();
+        return startIso.startsWith(selectedMonth);
+      })
+      .sort((a, b) => b.startTimestamp - a.startTimestamp);
+  }, [personalSessions, selectedMonth]);
 
   // 4. Performance Highlights & Data Insights
   const highestEarningClient = useMemo(() => {
@@ -662,11 +699,27 @@ export const ReportsPage: React.FC = () => {
           {/* Summary KPIs */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs">
-              <span className="text-xs text-slate-500 font-medium">Total Personal Working Hours</span>
+              <span className="text-xs text-slate-500 font-medium">Month Total Personal Hours</span>
               <p className="text-2xl font-bold text-indigo-600 font-mono tabular-nums mt-1">
                 {personalWorkSummary.totalHours} hrs
               </p>
               <span className="text-[10px] text-slate-400">in {selectedMonth}</span>
+            </div>
+
+            <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs">
+              <span className="text-xs text-slate-500 font-medium">Current Week Total</span>
+              <p className="text-2xl font-bold text-indigo-700 font-mono tabular-nums mt-1">
+                {(currentWeekTotalSeconds / 3600).toFixed(1)} hrs
+              </p>
+              <span className="text-[10px] text-slate-400">last 7 days rolling</span>
+            </div>
+
+            <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs">
+              <span className="text-xs text-slate-500 font-medium">Today's Personal Hours</span>
+              <p className="text-2xl font-bold text-emerald-600 font-mono tabular-nums mt-1">
+                {(todayTotalSeconds / 3600).toFixed(1)} hrs
+              </p>
+              <span className="text-[10px] text-slate-400">accumulated today</span>
             </div>
 
             <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs">
@@ -678,27 +731,11 @@ export const ReportsPage: React.FC = () => {
             </div>
 
             <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs">
-              <span className="text-xs text-slate-500 font-medium font-medium">Avg Working Hours / Day</span>
-              <p className="text-2xl font-bold text-slate-900 font-mono tabular-nums mt-1">
-                {personalWorkSummary.avgHoursPerWorkDay} hrs
-              </p>
-              <span className="text-[10px] text-slate-400">per work session day</span>
-            </div>
-
-            <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs">
-              <span className="text-xs text-slate-500 font-medium">Work Sessions Count</span>
+              <span className="text-xs text-slate-500 font-medium">Total Work Sessions</span>
               <p className="text-2xl font-bold text-slate-900 font-mono tabular-nums mt-1">
                 {personalWorkSummary.totalSessions}
               </p>
-              <span className="text-[10px] text-slate-400">total focus intervals</span>
-            </div>
-
-            <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs">
-              <span className="text-xs text-slate-500 font-medium">Total Break Time</span>
-              <p className="text-2xl font-bold text-amber-600 font-mono tabular-nums mt-1">
-                {personalWorkSummary.totalBreakHours} hrs
-              </p>
-              <span className="text-[10px] text-slate-400">rest & recovery</span>
+              <span className="text-[10px] text-slate-400">individual intervals</span>
             </div>
 
             <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs">
@@ -727,26 +764,33 @@ export const ReportsPage: React.FC = () => {
                 const maxVal = Math.max(...personalDaysInMonth.map((d) => d.activeWorkHours), 8);
                 const heightPct = Math.max(4, Math.round((day.activeWorkHours / maxVal) * 100));
                 const isToday = day.date === todayStr;
+                const isSelected = selectedDateDrilldown === day.date;
 
                 return (
-                  <div key={day.date} className="flex-1 min-w-[20px] flex flex-col items-center gap-1 group">
-                    <span className="text-[9px] font-mono tabular-nums font-semibold text-slate-500 group-hover:text-indigo-600">
+                  <div
+                    key={day.date}
+                    onClick={() => setSelectedDateDrilldown(isSelected ? null : day.date)}
+                    className="flex-1 min-w-[20px] flex flex-col items-center gap-1 group cursor-pointer"
+                  >
+                    <span className={`text-[9px] font-mono tabular-nums font-semibold ${isSelected ? 'text-indigo-700 font-bold' : 'text-slate-500 group-hover:text-indigo-600'}`}>
                       {day.activeWorkHours > 0 ? `${day.activeWorkHours}h` : ''}
                     </span>
                     <div className="w-full bg-slate-100 rounded-t h-24 flex items-end">
                       <div
                         style={{ height: `${heightPct}%` }}
                         className={`w-full rounded-t transition-all ${
-                          isToday
+                          isSelected
+                            ? 'bg-indigo-700 ring-2 ring-indigo-400'
+                            : isToday
                             ? 'bg-indigo-600'
                             : day.activeWorkHours > 0
                             ? 'bg-slate-700 hover:bg-indigo-500'
                             : 'bg-transparent'
                         }`}
-                        title={`${day.date}: ${day.activeWorkHours} hrs active work, ${day.breakHours} hrs break`}
+                        title={`${day.date}: ${day.activeWorkHours} hrs active work (${day.sessionsCount} sessions). Click to filter.`}
                       />
                     </div>
-                    <span className={`text-[9px] font-mono ${isToday ? 'text-indigo-600 font-bold' : 'text-slate-400'}`}>
+                    <span className={`text-[9px] font-mono ${isSelected ? 'text-indigo-700 font-black' : isToday ? 'text-indigo-600 font-bold' : 'text-slate-400'}`}>
                       {day.dayNum}
                     </span>
                   </div>
@@ -755,15 +799,25 @@ export const ReportsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Day-by-Day Personal Work Sessions Table */}
+          {/* Day-by-Day Personal Work Sessions Summary Table */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
             <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold text-slate-900">
-                  Day-by-Day Personal Work Session Log ({selectedMonth})
+                  Day-by-Day Personal Working Hours ({selectedMonth})
                 </h3>
-                <p className="text-xs text-slate-500">Excludes client-billing sessions for pure personal productivity analysis</p>
+                <p className="text-xs text-slate-500">
+                  Daily totals calculated from saved personal sessions. Click any day row to inspect its individual sessions below.
+                </p>
               </div>
+              {selectedDateDrilldown && (
+                <button
+                  onClick={() => setSelectedDateDrilldown(null)}
+                  className="px-2.5 py-1 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
+                >
+                  Clear Selection ({selectedDateDrilldown})
+                </button>
+              )}
             </div>
 
             <div className="overflow-x-auto max-h-96">
@@ -780,11 +834,17 @@ export const ReportsPage: React.FC = () => {
                 <tbody className="divide-y divide-slate-100">
                   {personalDaysInMonth.map((day) => {
                     const isToday = day.date === todayStr;
+                    const isSelected = selectedDateDrilldown === day.date;
                     return (
                       <tr
                         key={day.date}
-                        className={`hover:bg-slate-50/70 transition-colors ${
-                          day.hasActivity ? 'bg-white' : 'bg-slate-50/30 opacity-60'
+                        onClick={() => setSelectedDateDrilldown(isSelected ? null : day.date)}
+                        className={`cursor-pointer transition-colors ${
+                          isSelected
+                            ? 'bg-indigo-50/80 font-medium'
+                            : day.hasActivity
+                            ? 'hover:bg-slate-50/70 bg-white'
+                            : 'hover:bg-slate-50/50 bg-slate-50/30 opacity-60'
                         }`}
                       >
                         <td className="py-2.5 px-4 font-mono font-semibold text-slate-700 flex items-center gap-2">
@@ -792,6 +852,11 @@ export const ReportsPage: React.FC = () => {
                           {isToday && (
                             <span className="px-1.5 py-0.2 bg-indigo-100 text-indigo-700 rounded text-[9px] font-bold">
                               TODAY
+                            </span>
+                          )}
+                          {isSelected && (
+                            <span className="px-1.5 py-0.2 bg-indigo-600 text-white rounded text-[9px] font-bold">
+                              SELECTED
                             </span>
                           )}
                         </td>
@@ -827,6 +892,115 @@ export const ReportsPage: React.FC = () => {
                 </tbody>
               </table>
             </div>
+          </div>
+
+          {/* Historical Underlying Session Inspection Table */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Historical Underlying Session Inspection
+                </h3>
+                <p className="text-xs text-slate-500">
+                  {selectedDateDrilldown
+                    ? `Showing personal sessions for ${selectedDateDrilldown}`
+                    : `Saved personal working sessions for ${selectedMonth} (productivity records)`}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {selectedDateDrilldown && (
+                  <button
+                    onClick={() => setSelectedDateDrilldown(null)}
+                    className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold underline"
+                  >
+                    Show all days in {selectedMonth}
+                  </button>
+                )}
+                <span className="text-xs bg-slate-100 text-slate-700 font-mono font-semibold px-2.5 py-1 rounded-md">
+                  {
+                    monthPersonalSessions.filter((s) =>
+                      selectedDateDrilldown ? s.date === selectedDateDrilldown : true
+                    ).length
+                  }{' '}
+                  session(s)
+                </span>
+              </div>
+            </div>
+
+            {monthPersonalSessions.filter((s) => (selectedDateDrilldown ? s.date === selectedDateDrilldown : true)).length === 0 ? (
+              <div className="p-8 text-center">
+                <Clock className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-sm font-medium text-slate-700">No saved personal working sessions found</p>
+                <p className="text-xs text-slate-400 mt-1">
+                  {selectedDateDrilldown
+                    ? `No personal sessions recorded on ${selectedDateDrilldown}.`
+                    : `Start the Personal Working Hours Timer on the Dashboard or Today page to record productivity sessions.`}
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto max-h-96">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 sticky top-0 border-b border-slate-200 text-slate-600 font-semibold uppercase text-[10px]">
+                    <tr>
+                      <th className="py-2.5 px-4">Date</th>
+                      <th className="py-2.5 px-4">Time Interval</th>
+                      <th className="py-2.5 px-4 text-center">Duration</th>
+                      <th className="py-2.5 px-4 text-center">Status</th>
+                      <th className="py-2.5 px-4 text-right">Session Details</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-mono">
+                    {monthPersonalSessions
+                      .filter((s) => (selectedDateDrilldown ? s.date === selectedDateDrilldown : true))
+                      .map((session) => {
+                        const nowTs = Date.now();
+                        const isLive = session.status === 'in_progress';
+                        const durationSecs = isLive
+                          ? Math.max(0, Math.floor((nowTs - session.startTimestamp) / 1000))
+                          : session.durationSeconds;
+
+                        const hours = Math.floor(durationSecs / 3600);
+                        const mins = Math.floor((durationSecs % 3600) / 60);
+                        const secs = durationSecs % 60;
+                        const durationFormatted = `${hours > 0 ? `${hours}h ` : ''}${String(mins).padStart(2, '0')}m ${String(secs).padStart(2, '0')}s`;
+
+                        return (
+                          <tr key={session.id} className="hover:bg-slate-50/70 transition-colors">
+                            <td className="py-2.5 px-4 font-semibold text-slate-800">
+                              {session.date}
+                            </td>
+                            <td className="py-2.5 px-4 text-slate-700">
+                              {session.startTime} → {session.endTime || 'In progress'}
+                            </td>
+                            <td className="py-2.5 px-4 text-center font-bold text-indigo-600 tabular-nums">
+                              {durationFormatted}
+                            </td>
+                            <td className="py-2.5 px-4 text-center font-sans">
+                              {session.status === 'in_progress' ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                  In progress
+                                </span>
+                              ) : session.status === 'paused' ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800">
+                                  Paused
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700">
+                                  Completed
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-4 text-right font-sans text-slate-500 text-[11px]">
+                              {session.notes || 'Focus work interval'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}

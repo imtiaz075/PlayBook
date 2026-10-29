@@ -17,6 +17,7 @@ import {
   WorkdayState,
   WorkdayStatus,
   WorkdaySummary,
+  PersonalWorkSession,
   NeedsAttentionSettings,
   CompanyProfile,
   PlanBudget,
@@ -25,6 +26,8 @@ import {
 import { getStoredRates, saveRates, fetchLiveRates, ExchangeRatesData } from '../services/currency';
 import { playNotificationChime } from '../services/audio';
 import { parseDeadlineTarget, TWELVE_HOURS_MS } from '../services/deadline';
+import { useAuth } from './AuthContext';
+import { loadUserWorkspace, saveUserWorkspace } from '../services/firebase';
 
 // Initial default seed data ensuring immediate rich usability and testing
 const SEED_CLIENTS: Client[] = [
@@ -784,6 +787,15 @@ interface AppContextType {
   saveWorkdaySummaryNotes: (id: string, notes: string) => void;
   workdayHistory: WorkdaySummary[];
 
+  // Personal Working Sessions (Strictly separate from Client-Billing Timer)
+  personalSessions: PersonalWorkSession[];
+  activePersonalSession: PersonalWorkSession | null;
+  getPersonalDailyTotalSeconds: (targetDateStr?: string) => number;
+  getPersonalWeeklyTotalSeconds: (referenceDate?: Date) => number;
+  getPersonalMonthlyTotalSeconds: (targetMonthStr?: string) => number;
+  calculateSessionSecondsForDay: (session: PersonalWorkSession, targetDateStr: string, currentTimestamp?: number) => number;
+  deletePersonalSession: (id: string) => void;
+
   // Needs Attention Recurring Reminders
   needsAttentionSettings: NeedsAttentionSettings;
   updateNeedsAttentionSettings: (settings: Partial<NeedsAttentionSettings>) => void;
@@ -797,6 +809,8 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { currentUser, setSyncStatus, setLastSyncedAt } = useAuth();
+
   // Navigation
   const [activePage, setActivePage] = useState<string>('dashboard');
 
@@ -833,6 +847,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [expenses, setExpenses] = useState<Expense[]>(() => loadStored('expenses', SEED_EXPENSES));
   const [subscriptions, setSubscriptions] = useState<Subscription[]>(() => loadStored('subscriptions', SEED_SUBSCRIPTIONS));
   const [savingsTargets] = useState<SavingsTarget[]>(() => loadStored('savings_targets', []));
+  const [personalSessions, setPersonalSessions] = useState<PersonalWorkSession[]>(() =>
+    loadStored('personal_sessions', [])
+  );
+
+  useEffect(() => {
+    saveStored('personal_sessions', personalSessions);
+  }, [personalSessions]);
 
   const DEFAULT_COMPANY_PROFILE: CompanyProfile = {
     businessName: 'Apex Digital Studios',
@@ -1294,27 +1315,303 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     saveStored('workday_history', workdayHistory);
   }, [workdayHistory]);
 
+  // ==========================================
+  // CLOUD DATABASE SYNC (UNIQUE USER ID)
+  // ==========================================
+  const [isCloudLoaded, setIsCloudLoaded] = useState(false);
+
+  // Sync from cloud on login
+  useEffect(() => {
+    let isCancelled = false;
+    async function syncOnLogin() {
+      if (!currentUser?.uid) {
+        setIsCloudLoaded(false);
+        return;
+      }
+      try {
+        setSyncStatus('syncing');
+        const cloudData = await loadUserWorkspace(currentUser.uid);
+        if (isCancelled) return;
+
+        if (cloudData) {
+          if (Array.isArray(cloudData.clients)) setClients(cloudData.clients);
+          if (Array.isArray(cloudData.tasks)) setTasks(cloudData.tasks);
+          if (Array.isArray(cloudData.timeEntries)) setTimeEntries(cloudData.timeEntries);
+          if (Array.isArray(cloudData.invoices)) setInvoices(cloudData.invoices);
+          if (Array.isArray(cloudData.payments)) setPayments(cloudData.payments);
+          if (Array.isArray(cloudData.schedules)) setSchedules(cloudData.schedules);
+          if (Array.isArray(cloudData.goals)) setGoals(cloudData.goals);
+          if (Array.isArray(cloudData.budgetCategories)) setBudgetCategories(cloudData.budgetCategories);
+          if (Array.isArray(cloudData.expenses)) setExpenses(cloudData.expenses);
+          if (Array.isArray(cloudData.subscriptions)) setSubscriptions(cloudData.subscriptions);
+          if (cloudData.companyProfile) setCompanyProfile(cloudData.companyProfile);
+          if (Array.isArray(cloudData.workdayHistory)) setWorkdayHistory(cloudData.workdayHistory);
+          if (Array.isArray(cloudData.personalSessions)) setPersonalSessions(cloudData.personalSessions);
+          if (cloudData.settings) setSettings(cloudData.settings);
+        } else {
+          // First time sign-in: write initial state to Firestore under unique user ID
+          await saveUserWorkspace(currentUser.uid, {
+            clients,
+            tasks,
+            timeEntries,
+            invoices,
+            payments,
+            schedules,
+            goals,
+            budgetCategories,
+            expenses,
+            subscriptions,
+            companyProfile,
+            workdayHistory,
+            personalSessions,
+            settings,
+          });
+        }
+        setSyncStatus('synced');
+        setLastSyncedAt(new Date().toLocaleTimeString());
+        setIsCloudLoaded(true);
+      } catch (err) {
+        console.error('Error synchronizing cloud workspace:', err);
+        setSyncStatus('error');
+      }
+    }
+
+    syncOnLogin();
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentUser?.uid]);
+
+  // Automatically save workspace changes under unique user ID
+  useEffect(() => {
+    if (!currentUser?.uid || !isCloudLoaded) return;
+
+    const timeout = setTimeout(async () => {
+      try {
+        setSyncStatus('syncing');
+        await saveUserWorkspace(currentUser.uid, {
+          clients,
+          tasks,
+          timeEntries,
+          invoices,
+          payments,
+          schedules,
+          goals,
+          budgetCategories,
+          expenses,
+          subscriptions,
+          companyProfile,
+          workdayHistory,
+          personalSessions,
+          settings,
+        });
+        setSyncStatus('synced');
+        setLastSyncedAt(new Date().toLocaleTimeString());
+      } catch (err) {
+        console.error('Cloud auto-save failed:', err);
+        setSyncStatus('error');
+      }
+    }, 1500);
+
+    return () => clearTimeout(timeout);
+  }, [
+    currentUser?.uid,
+    isCloudLoaded,
+    clients,
+    tasks,
+    timeEntries,
+    invoices,
+    payments,
+    schedules,
+    goals,
+    budgetCategories,
+    expenses,
+    subscriptions,
+    companyProfile,
+    workdayHistory,
+    personalSessions,
+    settings,
+  ]);
+
+  // ==========================================
+  // PERSONAL WORKING SESSIONS & ACCURATE TOTALS
+  // ==========================================
+  const formatSessionClock = (ts: number) => {
+    return new Date(ts).toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  };
+
+  const calculateSessionSecondsForDay = useCallback(
+    (session: PersonalWorkSession, targetDateStr: string, currentTimestamp?: number): number => {
+      if (!session || !session.startTimestamp) return 0;
+
+      const [y, m, d] = targetDateStr.split('-').map(Number);
+      if (!y || !m || !d) return 0;
+
+      const dayStart = new Date(y, m - 1, d, 0, 0, 0, 0).getTime();
+      const dayEnd = new Date(y, m - 1, d, 23, 59, 59, 999).getTime();
+
+      const sessionStart = session.startTimestamp;
+      const sessionEnd = session.endTimestamp
+        ? session.endTimestamp
+        : session.status === 'in_progress'
+        ? currentTimestamp || Date.now()
+        : session.startTimestamp;
+
+      if (sessionEnd <= sessionStart) return 0;
+
+      const overlapStart = Math.max(sessionStart, dayStart);
+      const overlapEnd = Math.min(sessionEnd, dayEnd);
+
+      if (overlapEnd > overlapStart) {
+        return Math.floor((overlapEnd - overlapStart) / 1000);
+      }
+      return 0;
+    },
+    []
+  );
+
+  const getPersonalDailyTotalSeconds = useCallback(
+    (targetDateStr?: string): number => {
+      const dateStr = targetDateStr || new Date().toISOString().split('T')[0];
+      const now = Date.now();
+      let total = 0;
+      for (const session of personalSessions) {
+        total += calculateSessionSecondsForDay(session, dateStr, now);
+      }
+      return total;
+    },
+    [personalSessions, calculateSessionSecondsForDay]
+  );
+
+  const getPersonalWeeklyTotalSeconds = useCallback(
+    (referenceDate?: Date): number => {
+      const ref = referenceDate || new Date();
+      const d = new Date(ref);
+      const day = d.getDay();
+      const diff = (day === 0 ? -6 : 1) - day; // Monday as start of week
+      d.setDate(d.getDate() + diff);
+      d.setHours(0, 0, 0, 0);
+      const weekStartTs = d.getTime();
+      const weekEndTs = weekStartTs + 7 * 86400000;
+
+      const now = Date.now();
+      let total = 0;
+      for (const s of personalSessions) {
+        const sStart = s.startTimestamp;
+        const sEnd = s.endTimestamp || (s.status === 'in_progress' ? now : s.startTimestamp);
+        const overlapStart = Math.max(sStart, weekStartTs);
+        const overlapEnd = Math.min(sEnd, weekEndTs);
+        if (overlapEnd > overlapStart) {
+          total += Math.floor((overlapEnd - overlapStart) / 1000);
+        }
+      }
+      return total;
+    },
+    [personalSessions]
+  );
+
+  const getPersonalMonthlyTotalSeconds = useCallback(
+    (targetMonthStr?: string): number => {
+      const monthStr = targetMonthStr || new Date().toISOString().substring(0, 7);
+      const [y, m] = monthStr.split('-').map(Number);
+      if (!y || !m) return 0;
+      const monthStartTs = new Date(y, m - 1, 1, 0, 0, 0, 0).getTime();
+      const monthEndTs = new Date(y, m, 1, 0, 0, 0, 0).getTime();
+
+      const now = Date.now();
+      let total = 0;
+      for (const s of personalSessions) {
+        const sStart = s.startTimestamp;
+        const sEnd = s.endTimestamp || (s.status === 'in_progress' ? now : s.startTimestamp);
+        const overlapStart = Math.max(sStart, monthStartTs);
+        const overlapEnd = Math.min(sEnd, monthEndTs);
+        if (overlapEnd > overlapStart) {
+          total += Math.floor((overlapEnd - overlapStart) / 1000);
+        }
+      }
+      return total;
+    },
+    [personalSessions]
+  );
+
+  const activePersonalSession = useMemo(() => {
+    return personalSessions.find((s) => s.status === 'in_progress') || null;
+  }, [personalSessions]);
+
+  const deletePersonalSession = useCallback((id: string) => {
+    setPersonalSessions((prev) => prev.filter((s) => s.id !== id));
+  }, []);
+
   const startWorkday = useCallback(() => {
     const now = Date.now();
-    setWorkdayState((prev) => ({
-      ...prev,
-      status: 'working',
-      workdayStartTime: now,
-      currentIntervalStartTime: now,
-      accumulatedWorkSeconds: 0,
-      currentBreakStartTime: null,
-      accumulatedBreakSeconds: 0,
-      workSessionsCount: 1,
-      breaksCount: 0,
-      pausedAt: null,
-      workIntervalAlerted: false,
-      breakOverdueAlerted: false,
-    }));
-    addNotification('Workday Started', 'Daily working hours timer started. Have a productive day!', 'info', 'today');
-  }, [addNotification]);
+    const todayStr = new Date(now).toISOString().split('T')[0];
+
+    // Ensure only one active personal session is created
+    setPersonalSessions((prev) => {
+      const alreadyActive = prev.find((s) => s.status === 'in_progress');
+      if (alreadyActive) {
+        return prev;
+      }
+      const newSession: PersonalWorkSession = {
+        id: `pws-${now}-${Math.random().toString(36).substring(2, 7)}`,
+        date: todayStr,
+        startTime: formatSessionClock(now),
+        endTime: null,
+        startTimestamp: now,
+        endTimestamp: null,
+        durationSeconds: 0,
+        status: 'in_progress',
+        createdAt: new Date(now).toISOString(),
+      };
+      return [newSession, ...prev];
+    });
+
+    setWorkdayState((prev) => {
+      const todayCompletedSeconds = personalSessions
+        .filter((s) => s.status === 'completed' && s.date === todayStr)
+        .reduce((sum, s) => sum + s.durationSeconds, 0);
+
+      return {
+        ...prev,
+        status: 'working',
+        workdayStartTime: prev.workdayStartTime || now,
+        currentIntervalStartTime: now,
+        accumulatedWorkSeconds: todayCompletedSeconds,
+        currentBreakStartTime: null,
+        workSessionsCount: prev.workSessionsCount + 1,
+        pausedAt: null,
+        workIntervalAlerted: false,
+        breakOverdueAlerted: false,
+      };
+    });
+
+    addNotification('Personal Timer Started', 'Personal working session started.', 'info', 'today');
+  }, [personalSessions, addNotification]);
 
   const pauseWorkday = useCallback(() => {
     const now = Date.now();
+
+    // Close the in_progress session and save its duration permanently
+    setPersonalSessions((prev) =>
+      prev.map((s) => {
+        if (s.status === 'in_progress') {
+          const duration = Math.max(1, Math.floor((now - s.startTimestamp) / 1000));
+          return {
+            ...s,
+            endTime: formatSessionClock(now),
+            endTimestamp: now,
+            durationSeconds: duration,
+            status: 'completed',
+          };
+        }
+        return s;
+      })
+    );
+
     setWorkdayState((prev) => {
       if (prev.status !== 'working' && prev.status !== 'on_break') return prev;
 
@@ -1342,9 +1639,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const resumeWorkday = useCallback(() => {
     const now = Date.now();
+    const todayStr = new Date(now).toISOString().split('T')[0];
+
     setWorkdayState((prev) => {
       if (prev.status !== 'paused') return prev;
       const targetStatus = prev.previousStatusBeforePause === 'on_break' ? 'on_break' : 'working';
+
+      if (targetStatus === 'working') {
+        setPersonalSessions((sessions) => {
+          if (sessions.some((s) => s.status === 'in_progress')) return sessions;
+          const newSession: PersonalWorkSession = {
+            id: `pws-${now}-${Math.random().toString(36).substring(2, 7)}`,
+            date: todayStr,
+            startTime: formatSessionClock(now),
+            endTime: null,
+            startTimestamp: now,
+            endTimestamp: null,
+            durationSeconds: 0,
+            status: 'in_progress',
+            createdAt: new Date(now).toISOString(),
+          };
+          return [newSession, ...sessions];
+        });
+      }
 
       return {
         ...prev,
@@ -1352,12 +1669,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         pausedAt: null,
         currentIntervalStartTime: targetStatus === 'working' ? now : null,
         currentBreakStartTime: targetStatus === 'on_break' ? now : null,
+        workSessionsCount:
+          targetStatus === 'working' ? prev.workSessionsCount + 1 : prev.workSessionsCount,
       };
     });
   }, []);
 
   const startBreak = useCallback(() => {
     const now = Date.now();
+
+    // Close in_progress working session
+    setPersonalSessions((prev) =>
+      prev.map((s) => {
+        if (s.status === 'in_progress') {
+          const duration = Math.max(1, Math.floor((now - s.startTimestamp) / 1000));
+          return {
+            ...s,
+            endTime: formatSessionClock(now),
+            endTimestamp: now,
+            durationSeconds: duration,
+            status: 'completed',
+          };
+        }
+        return s;
+      })
+    );
+
     setWorkdayState((prev) => {
       let newAccWork = prev.accumulatedWorkSeconds;
       if (prev.status === 'working' && prev.currentIntervalStartTime) {
@@ -1374,11 +1711,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         breakOverdueAlerted: false,
       };
     });
-    addNotification('Break Started', `Enjoy your ${workdayState.targetBreakMinutes} minute break!`, 'info', 'today');
+    addNotification(
+      'Break Started',
+      `Enjoy your ${workdayState.targetBreakMinutes} minute break!`,
+      'info',
+      'today'
+    );
   }, [addNotification, workdayState.targetBreakMinutes]);
 
   const resumeFromBreak = useCallback(() => {
     const now = Date.now();
+    const todayStr = new Date(now).toISOString().split('T')[0];
+
+    // Start a fresh in_progress personal session
+    setPersonalSessions((prev) => {
+      if (prev.some((s) => s.status === 'in_progress')) return prev;
+      const newSession: PersonalWorkSession = {
+        id: `pws-${now}-${Math.random().toString(36).substring(2, 7)}`,
+        date: todayStr,
+        startTime: formatSessionClock(now),
+        endTime: null,
+        startTimestamp: now,
+        endTimestamp: null,
+        durationSeconds: 0,
+        status: 'in_progress',
+        createdAt: new Date(now).toISOString(),
+      };
+      return [newSession, ...prev];
+    });
+
     setWorkdayState((prev) => {
       let newAccBreak = prev.accumulatedBreakSeconds;
       if (prev.status === 'on_break' && prev.currentBreakStartTime) {
@@ -1400,6 +1761,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const skipBreak = useCallback(() => {
     const now = Date.now();
+    const todayStr = new Date(now).toISOString().split('T')[0];
+
+    // Start in_progress personal session
+    setPersonalSessions((prev) => {
+      if (prev.some((s) => s.status === 'in_progress')) return prev;
+      const newSession: PersonalWorkSession = {
+        id: `pws-${now}-${Math.random().toString(36).substring(2, 7)}`,
+        date: todayStr,
+        startTime: formatSessionClock(now),
+        endTime: null,
+        startTimestamp: now,
+        endTimestamp: null,
+        durationSeconds: 0,
+        status: 'in_progress',
+        createdAt: new Date(now).toISOString(),
+      };
+      return [newSession, ...prev];
+    });
+
     setWorkdayState((prev) => {
       let newAccBreak = prev.accumulatedBreakSeconds;
       if (prev.status === 'on_break' && prev.currentBreakStartTime) {
@@ -1420,6 +1800,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const endWorkday = useCallback(() => {
     const now = Date.now();
+    const todayStr = new Date(now).toISOString().split('T')[0];
+
+    // Close any active session and save its duration
+    setPersonalSessions((prev) =>
+      prev.map((s) => {
+        if (s.status === 'in_progress') {
+          const duration = Math.max(1, Math.floor((now - s.startTimestamp) / 1000));
+          return {
+            ...s,
+            endTime: formatSessionClock(now),
+            endTimestamp: now,
+            durationSeconds: duration,
+            status: 'completed',
+          };
+        }
+        return s;
+      })
+    );
+
     let finalActiveWork = workdayState.accumulatedWorkSeconds;
     let finalBreak = workdayState.accumulatedBreakSeconds;
 
@@ -1438,7 +1837,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const summary: WorkdaySummary = {
       id: `ws-${Date.now()}`,
-      date: new Date().toISOString().split('T')[0],
+      date: todayStr,
       startTime: formatClockTime(startTimestamp),
       endTime: formatClockTime(now),
       totalElapsedSeconds: totalElapsed,
@@ -1448,7 +1847,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       breaksCount: workdayState.breaksCount,
       plannedWorkMinutes: workdayState.targetWorkMinutes,
       actualWorkMinutes: Math.round(finalActiveWork / 60),
-      status: finalActiveWork >= workdayState.targetWorkMinutes * 60 ? 'completed' : 'ended_early',
+      status:
+        finalActiveWork >= workdayState.targetWorkMinutes * 60 ? 'completed' : 'ended_early',
       createdAt: new Date().toISOString(),
     };
 
@@ -1469,7 +1869,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (settings.notificationPreferences.sound) {
       playNotificationChime('complete');
     }
-    addNotification('Workday Completed', `Great job today! Total active time: ${Math.round(finalActiveWork / 60)} minutes.`, 'success', 'today');
+    addNotification(
+      'Workday Completed',
+      `Great job today! Total active personal time: ${Math.round(finalActiveWork / 60)} minutes.`,
+      'success',
+      'today'
+    );
   }, [workdayState, settings.notificationPreferences.sound, addNotification]);
 
   const updateWorkdayConfig = useCallback((targetWorkMinutes: number, targetBreakMinutes: number) => {
@@ -2101,6 +2506,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setWorkdaySummaryOpen,
       saveWorkdaySummaryNotes,
       workdayHistory,
+      personalSessions,
+      activePersonalSession,
+      getPersonalDailyTotalSeconds,
+      getPersonalWeeklyTotalSeconds,
+      getPersonalMonthlyTotalSeconds,
+      calculateSessionSecondsForDay,
+      deletePersonalSession,
       needsAttentionSettings,
       updateNeedsAttentionSettings,
       dismissAttentionItem,
@@ -2200,6 +2612,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       workdaySummaryOpen,
       saveWorkdaySummaryNotes,
       workdayHistory,
+      personalSessions,
+      activePersonalSession,
+      getPersonalDailyTotalSeconds,
+      getPersonalWeeklyTotalSeconds,
+      getPersonalMonthlyTotalSeconds,
+      calculateSessionSecondsForDay,
+      deletePersonalSession,
       needsAttentionSettings,
       updateNeedsAttentionSettings,
       dismissAttentionItem,

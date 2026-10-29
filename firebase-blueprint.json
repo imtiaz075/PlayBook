@@ -1,0 +1,52 @@
+{
+  "entities": {
+    "userProfile": {
+      "title": "UserProfile",
+      "description": "User profile information and workspace metadata",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "lastLoginAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["uid", "email"]
+    },
+    "workspaceState": {
+      "title": "WorkspaceState",
+      "description": "User personal history, clients, tasks, time tracker sessions, invoices, and settings",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "clients": { "type": "array" },
+        "tasks": { "type": "array" },
+        "timeEntries": { "type": "array" },
+        "invoices": { "type": "array" },
+        "payments": { "type": "array" },
+        "schedules": { "type": "array" },
+        "goals": { "type": "array" },
+        "budgetCategories": { "type": "array" },
+        "expenses": { "type": "array" },
+        "subscriptions": { "type": "array" },
+        "companyProfile": { "type": "object" },
+        "workdayHistory": { "type": "array" },
+        "personalSessions": { "type": "array" },
+        "settings": { "type": "object" }
+      },
+      "required": ["userId", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "userProfile",
+      "description": "Stores user account profile information"
+    },
+    "/users/{userId}/workspace/data": {
+      "schema": "workspaceState",
+      "description": "Stores user personal workspace data securely under unique user ID"
+    }
+  }
+}

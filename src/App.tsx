@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppProvider, useApp } from './context/AppContext';
+import { AuthWelcomeOverlay } from './components/auth/AuthWelcomeOverlay';
+import { AuthLoadingScreen } from './components/auth/AuthLoadingScreen';
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 import { QuickAddModal } from './components/layout/QuickAddModal';
@@ -19,6 +22,8 @@ import { EarningsPage } from './components/pages/EarningsPage';
 import { GoalsPage } from './components/pages/GoalsPage';
 import { BudgetPage } from './components/pages/BudgetPage';
 import { ReportsPage } from './components/pages/ReportsPage';
+import { LoginPage } from './components/pages/LoginPage';
+import { AuthModal } from './components/modals/AuthModal';
 
 // Modals
 import { InvoiceModal } from './components/modals/InvoiceModal';
@@ -36,6 +41,7 @@ import { CompanyProfileModal } from './components/modals/CompanyProfileModal';
 import { Task, Invoice } from './types';
 
 const MainAppContent: React.FC = () => {
+  const { currentUser, isAuthLoading } = useAuth();
   const {
     activePage,
     workdaySummary,
@@ -139,15 +145,25 @@ const MainAppContent: React.FC = () => {
     setDetailClientId(clientId);
   };
 
+  if (isAuthLoading) {
+    return <AuthLoadingScreen />;
+  }
+
   return (
-    <div className="flex h-screen bg-slate-100 font-sans text-slate-800 antialiased overflow-hidden">
-      {/* Sidebar Navigation */}
-      <Sidebar
-        collapsed={sidebarCollapsed}
-        setCollapsed={setSidebarCollapsed}
-        mobileOpen={mobileMenuOpen}
-        setMobileOpen={setMobileMenuOpen}
-      />
+    <div className="flex h-screen bg-slate-100 font-sans text-slate-800 antialiased overflow-hidden relative">
+      {/* Full-Screen Welcome Overlay for unauthenticated users */}
+      {!currentUser && <AuthWelcomeOverlay />}
+
+      {/* Authenticated Workspace Content */}
+      {currentUser && (
+        <>
+          {/* Sidebar Navigation */}
+          <Sidebar
+            collapsed={sidebarCollapsed}
+            setCollapsed={setSidebarCollapsed}
+            mobileOpen={mobileMenuOpen}
+            setMobileOpen={setMobileMenuOpen}
+          />
 
       {/* Main Layout Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
@@ -220,10 +236,13 @@ const MainAppContent: React.FC = () => {
           )}
 
           {activePage === 'reports' && <ReportsPage />}
+
+          {activePage === 'login' && <LoginPage />}
         </main>
       </div>
 
       {/* Global Layer Modals */}
+      <AuthModal />
       <QuickAddModal />
       <SettingsModal />
       <NotificationDrawer />
@@ -306,15 +325,19 @@ const MainAppContent: React.FC = () => {
         onClose={() => setWorkdaySummaryOpen(false)}
         onSaveNotes={saveWorkdaySummaryNotes}
       />
+        </>
+      )}
     </div>
   );
 };
 
 export function App() {
   return (
-    <AppProvider>
-      <MainAppContent />
-    </AppProvider>
+    <AuthProvider>
+      <AppProvider>
+        <MainAppContent />
+      </AppProvider>
+    </AuthProvider>
   );
 }
 

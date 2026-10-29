@@ -345,6 +345,19 @@ export interface WorkdayState {
   breakOverdueAlerted: boolean;
 }
 
+export interface PersonalWorkSession {
+  id: string;
+  date: string; // YYYY-MM-DD (local calendar day)
+  startTime: string; // formatted display time e.g. "09:30 AM" or ISO
+  endTime: string | null; // formatted display time e.g. "10:15 AM", or null if in progress
+  startTimestamp: number; // millisecond epoch
+  endTimestamp: number | null; // millisecond epoch
+  durationSeconds: number; // calculated seconds
+  status: 'in_progress' | 'completed' | 'paused';
+  notes?: string;
+  createdAt: string;
+}
+
 export interface WorkdaySummary {
   id: string;
   date: string;

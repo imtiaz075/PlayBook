@@ -14,8 +14,12 @@ import {
   ChevronLeft,
   ChevronRight,
   Sparkles,
+  User,
+  LogIn,
+  Cloud,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -31,6 +35,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setMobileOpen,
 }) => {
   const { activePage, setActivePage, tasks, schedules, setQuickAddOpen } = useApp();
+  const { currentUser, setShowLoginModal } = useAuth();
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -66,6 +71,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'goals', label: 'Goals', icon: Target },
     { id: 'budget', label: 'Budget', icon: PieChart },
     { id: 'reports', label: 'Reports', icon: FileBarChart },
+    { id: 'login', label: 'Account & Sync', icon: User },
   ];
 
   const handleNavClick = (id: string) => {
@@ -170,9 +176,52 @@ export const Sidebar: React.FC<SidebarProps> = ({
         })}
       </nav>
 
+      {/* Account / Login Footer Card */}
+      <div className="p-3 border-t border-slate-800/80">
+        {currentUser ? (
+          <button
+            onClick={() => handleNavClick('login')}
+            className={`w-full flex items-center gap-2.5 p-2 rounded-lg bg-slate-800/60 hover:bg-slate-800 border border-slate-700/50 transition-colors text-left ${
+              collapsed ? 'justify-center p-1.5' : ''
+            }`}
+            title={`Account: ${currentUser.displayName || currentUser.email}`}
+          >
+            <div className="w-6 h-6 rounded-full overflow-hidden bg-indigo-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+              {currentUser.photoURL ? (
+                <img src={currentUser.photoURL} alt="" className="w-full h-full object-cover" />
+              ) : (
+                (currentUser.displayName || currentUser.email || 'U')[0].toUpperCase()
+              )}
+            </div>
+            {!collapsed && (
+              <div className="truncate flex-1 min-w-0">
+                <span className="text-xs font-semibold text-white block truncate">
+                  {currentUser.displayName || currentUser.email?.split('@')[0]}
+                </span>
+                <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  Cloud Synced
+                </span>
+              </div>
+            )}
+          </button>
+        ) : (
+          <button
+            onClick={() => setShowLoginModal(true)}
+            className={`w-full flex items-center gap-2 p-2 rounded-lg bg-indigo-950/60 hover:bg-indigo-900/60 border border-indigo-700/40 text-indigo-200 transition-colors text-xs font-medium ${
+              collapsed ? 'justify-center p-1.5' : ''
+            }`}
+            title="Sign in with Google"
+          >
+            <LogIn size={15} className="text-indigo-400 shrink-0" />
+            {!collapsed && <span>Sign In to Sync</span>}
+          </button>
+        )}
+      </div>
+
       {/* Footer Motivation Hint */}
       {!collapsed && (
-        <div className="p-3.5 m-3 rounded-lg bg-slate-800/60 border border-slate-800 text-[11px] text-slate-400 flex items-start gap-2.5">
+        <div className="p-3 m-3 mt-0 rounded-lg bg-slate-800/40 border border-slate-800 text-[11px] text-slate-400 flex items-start gap-2.5">
           <Sparkles size={14} className="text-amber-400 shrink-0 mt-0.5" />
           <p className="line-clamp-2">Consistency builds compounding freelance freedom.</p>
         </div>
