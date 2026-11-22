@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Clock, Save } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { TimeEntry } from '../../types';
+import { formatCurrency, CURRENCY_SYMBOLS } from '../../services/currency';
 
 interface ManualTimeModalProps {
   isOpen: boolean;
@@ -56,9 +57,15 @@ export const ManualTimeModal: React.FC<ManualTimeModalProps> = ({
   const selectedClient = clients.find((c) => c.id === clientId) || clients[0];
   const clientTasks = tasks.filter((t) => t.clientId === clientId);
   const selectedTask = tasks.find((t) => t.id === projectId);
+  const activeCurrency =
+    selectedTask?.currency || selectedClient?.preferredCurrency || settings.defaultCurrency || 'USD';
+  const activeCurrencySymbol = CURRENCY_SYMBOLS[activeCurrency] || activeCurrency;
 
-  const totalSeconds = Number(hours) * 3600 + Number(minutes) * 60;
-  const billableAmount = isBillable ? Number(((totalSeconds / 3600) * Number(hourlyRate)).toFixed(2)) : 0;
+  const safeHours = Math.max(0, Number(hours) || 0);
+  const safeMinutes = Math.max(0, Number(minutes) || 0);
+  const safeRate = Math.max(0, Number(hourlyRate) || 0);
+  const totalSeconds = safeHours * 3600 + safeMinutes * 60;
+  const billableAmount = isBillable ? Number(((totalSeconds / 3600) * safeRate).toFixed(2)) : 0;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -175,7 +182,9 @@ export const ManualTimeModal: React.FC<ManualTimeModalProps> = ({
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Hourly Rate ($)</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Hourly Rate ({activeCurrencySymbol})
+              </label>
               <input
                 type="number"
                 min="0"
@@ -214,7 +223,9 @@ export const ManualTimeModal: React.FC<ManualTimeModalProps> = ({
           <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl">
             <div>
               <span className="text-xs font-bold text-slate-800">Billable Session</span>
-              <p className="text-[10px] text-slate-500">Calculated value: ${billableAmount}</p>
+              <p className="text-[10px] text-slate-500">
+                Calculated value: {formatCurrency(billableAmount, activeCurrency)}
+              </p>
             </div>
             <input
               type="checkbox"

@@ -28,7 +28,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
   const [clientId, setClientId] = useState(prefillData?.clientId || clients[0]?.id || '');
   const [projectId, setProjectId] = useState(prefillData?.projectId || '');
-  const [currency, setCurrency] = useState('USD');
+  const [currency, setCurrency] = useState(
+    clients.find((c) => c.id === (prefillData?.clientId || clients[0]?.id))?.preferredCurrency ||
+      settings.defaultCurrency ||
+      'USD'
+  );
   const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0]);
   const [dueDate, setDueDate] = useState(
     new Date(Date.now() + 86400000 * 14).toISOString().split('T')[0]
@@ -58,6 +62,10 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     if (prefillData) {
       if (prefillData.clientId) setClientId(prefillData.clientId);
       if (prefillData.projectId) setProjectId(prefillData.projectId);
+      const linkedTask = tasks.find((t) => t.id === prefillData.projectId);
+      const linkedClient = clients.find((c) => c.id === prefillData.clientId);
+      const nextCurr = linkedTask?.currency || linkedClient?.preferredCurrency || settings.defaultCurrency;
+      if (nextCurr) setCurrency(nextCurr);
       if (prefillData.amount) {
         setLineItems([
           {
@@ -72,7 +80,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         ]);
       }
     }
-  }, [prefillData]);
+  }, [prefillData, tasks, clients, settings.defaultCurrency]);
 
   if (!isOpen) return null;
 

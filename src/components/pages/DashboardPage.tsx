@@ -44,6 +44,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     payments,
     expenses,
     budgetCategories,
+    planBudgets,
     clients,
     displayCurrency,
     ratesData,
@@ -149,9 +150,24 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
   const maxDailyHours = Math.max(...last7DaysLabels.map((d) => d.hours), 5);
 
-  // Monthly Budget Progress
-  const totalPlannedBudget = budgetCategories
-    .reduce((sum, c) => sum + c.monthlyLimit, 0);
+  // Monthly Budget Progress (uses monthly plan budgets covering current month if set, else category caps)
+  const currentMonthYm = todayStr.substring(0, 7);
+  const currentMonthPlans = planBudgets.filter((b) => {
+    const startYm = (b.startDate || '').substring(0, 7);
+    const endYm = (b.endDate || '').substring(0, 7);
+    if (startYm && endYm) return currentMonthYm >= startYm && currentMonthYm <= endYm;
+    return startYm === currentMonthYm;
+  });
+  const totalPlannedBudget =
+    currentMonthPlans.length > 0
+      ? currentMonthPlans.reduce(
+          (sum, b) => sum + convertCurrency(b.totalPlannedBudget || 0, b.currency || 'USD', displayCurrency, ratesData.rates),
+          0
+        )
+      : budgetCategories.reduce(
+          (sum, c) => sum + convertCurrency(c.monthlyLimit || 0, c.currency || 'USD', displayCurrency, ratesData.rates),
+          0
+        );
 
   const currentMonthExpenses = expenses
     .filter((e) => e.date.startsWith(todayStr.substring(0, 7)))
@@ -164,14 +180,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
   // Monthly Earnings Goal Progress
   const primaryGoal = goals.find((g) => g.category === 'achievements' || g.name.includes('October Target')) || goals[0];
-  const goalTarget = primaryGoal ? (primaryGoal.targetValue || 6000) : 6000;
+  const rawGoalTarget = primaryGoal ? (primaryGoal.targetValue || 6000) : 6000;
+  const goalTarget = convertCurrency(rawGoalTarget, 'USD', displayCurrency, ratesData.rates);
   const currentMonthPayments = payments
     .filter((p) => p.date.startsWith(todayStr.substring(0, 7)))
     .reduce(
       (sum, p) => sum + convertCurrency(p.amount, p.currency, displayCurrency, ratesData.rates),
       0
     );
-  const goalPct = Math.min(100, Math.round((currentMonthPayments / goalTarget) * 100));
+  const goalPct = goalTarget > 0 ? Math.min(100, Math.round((currentMonthPayments / goalTarget) * 100)) : 0;
 
   return (
     <div className="space-y-6">

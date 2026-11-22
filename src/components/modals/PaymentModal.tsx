@@ -17,7 +17,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   targetTask,
   targetInvoice,
 }) => {
-  const { clients, tasks, invoices, addPayment } = useApp();
+  const { clients, tasks, invoices, addPayment, settings } = useApp();
 
   const [clientId, setClientId] = useState(
     targetInvoice?.clientId || targetTask?.clientId || clients[0]?.id || ''
@@ -26,7 +26,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const [invoiceId, setInvoiceId] = useState(targetInvoice?.id || '');
   const [amount, setAmount] = useState('100');
   const [currency, setCurrency] = useState(
-    targetInvoice?.currency || targetTask?.currency || 'USD'
+    targetInvoice?.currency || targetTask?.currency || settings.defaultCurrency || 'USD'
   );
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentMethod, setPaymentMethod] = useState('bank_transfer');
@@ -150,7 +150,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 <option value="">No specific invoice</option>
                 {clientInvoices.map((inv) => (
                   <option key={inv.id} value={inv.id}>
-                    {inv.invoiceNumber} (${inv.balanceDue} due)
+                    {inv.invoiceNumber} ({formatCurrency(inv.balanceDue, inv.currency)} due)
                   </option>
                 ))}
               </select>

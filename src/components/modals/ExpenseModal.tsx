@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { CreditCard, X, Plus, Save } from 'lucide-react';
+import { CreditCard, X, Save, AlertTriangle, Wallet } from 'lucide-react';
 import { Expense, PlanBudget } from '../../types';
+import { formatCurrency, convertCurrency } from '../../services/currency';
+import { useApp } from '../../context/AppContext';
 
 interface ExpenseModalProps {
   isOpen: boolean;
@@ -41,11 +43,12 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
   onUpdateExpense,
   budgets = [],
 }) => {
+  const { displayCurrency, expenses, ratesData } = useApp();
   const todayStr = new Date().toISOString().split('T')[0];
 
   const [title, setTitle] = useState(editingExpense?.title || '');
   const [amount, setAmount] = useState<string>(editingExpense ? String(editingExpense.amount) : '');
-  const [currency, setCurrency] = useState(editingExpense?.currency || 'USD');
+  const [currency, setCurrency] = useState(editingExpense?.currency || displayCurrency || 'USD');
   const [category, setCategory] = useState(editingExpense?.category || 'Business Expenses');
   const [customCategory, setCustomCategory] = useState('');
   const [isCustom, setIsCustom] = useState(false);
@@ -68,7 +71,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
       const custom = !PREDEFINED_EXPENSE_CATEGORIES.includes(cat);
       setTitle(editingExpense.title || '');
       setAmount(editingExpense.amount !== undefined ? String(editingExpense.amount) : '');
-      setCurrency(editingExpense.currency || 'USD');
+      setCurrency(editingExpense.currency || displayCurrency || 'USD');
       setIsCustom(custom);
       setCategory(custom ? 'Business Expenses' : cat);
       setCustomCategory(custom ? cat : '');
@@ -83,7 +86,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
     } else {
       setTitle('');
       setAmount('');
-      setCurrency('USD');
+      setCurrency(displayCurrency || 'USD');
       setIsCustom(false);
       setCategory('Business Expenses');
       setCustomCategory('');
@@ -96,9 +99,56 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
       setNotes('');
       setReceiptAttachment('');
     }
-  }, [editingExpense, isOpen]);
+  }, [editingExpense, isOpen, displayCurrency]);
 
   if (!isOpen) return null;
+
+  // Match explicitly selected budget plan or the monthly budget covering this expense date
+  const matchedBudget =
+    (budgetId ? budgets.find((b) => b.id === budgetId) : undefined) ||
+    budgets.find((b) => Boolean(b.startDate && b.endDate && date >= b.startDate && date <= b.endDate));
+
+  const budgetRemainingPreview = matchedBudget
+    ? (() => {
+        const planCurr = matchedBudget.currency || 'USD';
+        const limitInDisplay = convertCurrency(
+          matchedBudget.totalPlannedBudget || 0,
+          planCurr,
+          displayCurrency,
+          ratesData.rates
+        );
+        const alreadySpentInDisplay = expenses
+          .filter((e) => {
+            if (editingExpense && e.id === editingExpense.id) return false;
+            if (e.budgetId) return e.budgetId === matchedBudget.id;
+            return Boolean(
+              matchedBudget.startDate &&
+                matchedBudget.endDate &&
+                e.date >= matchedBudget.startDate &&
+                e.date <= matchedBudget.endDate
+            );
+          })
+          .reduce(
+            (sum, e) => sum + convertCurrency(e.amount || 0, e.currency || 'USD', displayCurrency, ratesData.rates),
+            0
+          );
+        const currentAmtInDisplay = convertCurrency(
+          parseFloat(amount) || 0,
+          currency,
+          displayCurrency,
+          ratesData.rates
+        );
+        const remainingBefore = limitInDisplay - alreadySpentInDisplay;
+        const remainingAfter = limitInDisplay - (alreadySpentInDisplay + currentAmtInDisplay);
+        return {
+          name: matchedBudget.name,
+          limitInDisplay,
+          alreadySpentInDisplay,
+          remainingBefore,
+          remainingAfter,
+        };
+      })()
+    : null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -205,13 +255,58 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
                 className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-rose-500 focus:outline-none"
               >
                 <option value="USD">USD ($)</option>
+                <option value="PKR">PKR (Rs)</option>
                 <option value="EUR">EUR (€)</option>
                 <option value="GBP">GBP (£)</option>
-                <option value="USDT">USDT (₮)</option>
-                <option value="CAD">CAD ($)</option>
+                <option value="USDT">USDT</option>
+                <option value="CAD">CAD (CA$)</option>
+                <option value="AUD">AUD (AU$)</option>
+                <option value="INR">INR (₹)</option>
+                <option value="BDT">BDT (৳)</option>
+                <option value="AED">AED</option>
+                <option value="SAR">SAR</option>
               </select>
             </div>
           </div>
+
+          {/* Live Remaining Monthly Budget Indicator */}
+          {budgetRemainingPreview && (
+            <div
+              className={`p-3 rounded-xl border text-xs space-y-1 ${
+                budgetRemainingPreview.remainingAfter < 0
+                  ? 'bg-rose-50 border-rose-200 text-rose-900'
+                  : 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-bold flex items-center gap-1.5 truncate">
+                  {budgetRemainingPreview.remainingAfter < 0 ? (
+                    <AlertTriangle size={13} className="text-rose-600 shrink-0" />
+                  ) : (
+                    <Wallet size={13} className="text-emerald-600 shrink-0" />
+                  )}
+                  <span className="truncate">{budgetRemainingPreview.name}</span>
+                </span>
+                <span className="font-mono font-semibold shrink-0">
+                  Limit: {formatCurrency(budgetRemainingPreview.limitInDisplay, displayCurrency)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[11px] font-mono">
+                <span className="opacity-80">
+                  Left before: {formatCurrency(Math.max(0, budgetRemainingPreview.remainingBefore), displayCurrency)}
+                </span>
+                <span
+                  className={`font-bold ${
+                    budgetRemainingPreview.remainingAfter < 0 ? 'text-rose-700' : 'text-emerald-700'
+                  }`}
+                >
+                  {budgetRemainingPreview.remainingAfter >= 0
+                    ? `Left after expense: ${formatCurrency(budgetRemainingPreview.remainingAfter, displayCurrency)}`
+                    : `Over budget by ${formatCurrency(Math.abs(budgetRemainingPreview.remainingAfter), displayCurrency)}`}
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Category Selector */}
           <div>
@@ -294,7 +389,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
                 <option value="">None (Standalone Expense)</option>
                 {budgets.map((b) => (
                   <option key={b.id} value={b.id}>
-                    {b.name} ({b.currency} {b.totalPlannedBudget})
+                    {b.name} ({formatCurrency(b.totalPlannedBudget, b.currency || 'USD')})
                   </option>
                 ))}
               </select>

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, CheckSquare, Plus, DollarSign, Percent, AlertCircle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Priority, PlatformType, TaskStatus, Task } from '../../types';
+import { CURRENCY_SYMBOLS } from '../../services/currency';
 
 interface TaskModalProps {
   isOpen: boolean;
@@ -265,11 +266,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 }}
                 className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
               >
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.fullName} ({c.companyName || c.clientSource}{c.hourlyRate ? ` · $${c.hourlyRate}/h` : ''})
-                  </option>
-                ))}
+                {clients.map((c) => {
+                  const sym = CURRENCY_SYMBOLS[c.preferredCurrency || 'USD'] || c.preferredCurrency || '$';
+                  return (
+                    <option key={c.id} value={c.id}>
+                      {c.fullName} ({c.companyName || c.clientSource}{c.hourlyRate ? ` · ${sym} ${c.hourlyRate}/h` : ''})
+                    </option>
+                  );
+                })}
               </select>
             )}
           </div>

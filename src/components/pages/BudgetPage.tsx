@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Expense, Subscription, BudgetCategory, PlanBudget } from '../../types';
-import { formatCurrency, convertCurrency } from '../../services/currency';
+import { formatCurrency, convertCurrency, CURRENCY_SYMBOLS } from '../../services/currency';
 import { InfoTooltip } from '../common/Tooltip';
 import { PlanBudgetModal } from '../modals/PlanBudgetModal';
 import { ExpenseModal } from '../modals/ExpenseModal';
@@ -95,15 +95,18 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
   });
 
   // Category spending breakdown
+  const normalizeCatName = (str: string) =>
+    (str || '').toLowerCase().replace(/\s*&\s*/g, ' and ').trim();
+
   const categorySpending = budgetCategories.map((cat) => {
-    const catNameLower = (cat.name || '').toLowerCase();
+    const catNameNormalized = normalizeCatName(cat.name);
     const spent = monthExpenses
-      .filter((e) => (e.category || '').toLowerCase() === catNameLower)
+      .filter((e) => normalizeCatName(e.category) === catNameNormalized)
       .reduce(
         (sum, e) => sum + convertCurrency(e.amount || 0, e.currency || 'USD', displayCurrency, ratesData.rates),
         0
       );
-    const limit = convertCurrency(cat.monthlyLimit || 0, 'USD', displayCurrency, ratesData.rates);
+    const limit = convertCurrency(cat.monthlyLimit || 0, cat.currency || 'USD', displayCurrency, ratesData.rates);
     const remaining = limit - spent;
     const pctUsed = limit > 0 ? Math.round((spent / limit) * 100) : 0;
     const isOver = spent > limit;
@@ -118,13 +121,40 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
     };
   });
 
-  // Overall statistics
-  const totalPlannedSpending = categorySpending.reduce((sum, c) => sum + c.limit, 0);
-  const totalActualSpending = expenses.reduce(
-    (sum, e) => sum + convertCurrency(e.amount, e.currency, displayCurrency, ratesData.rates),
+  // Match budget plans covering selectedMonth (e.g. '2026-11')
+  const matchingMonthPlans = planBudgets.filter((b) => {
+    const startYm = (b.startDate || '').substring(0, 7);
+    const endYm = (b.endDate || '').substring(0, 7);
+    if (startYm && endYm) {
+      return selectedMonth >= startYm && selectedMonth <= endYm;
+    }
+    return startYm === selectedMonth;
+  });
+
+  // Overall monthly statistics for selectedMonth
+  const categoryCapsTotal = categorySpending.reduce((sum, c) => sum + c.limit, 0);
+  const monthlyPlanTotal = matchingMonthPlans.reduce(
+    (sum, b) =>
+      sum + convertCurrency(b.totalPlannedBudget || 0, b.currency || 'USD', displayCurrency, ratesData.rates),
     0
   );
-  const totalRemainingBudget = Math.max(0, totalPlannedSpending - totalActualSpending);
+  const hasMonthBudgetPlan = matchingMonthPlans.length > 0;
+  const totalPlannedSpending = hasMonthBudgetPlan ? monthlyPlanTotal : categoryCapsTotal;
+
+  const totalActualSpending = monthExpenses.reduce(
+    (sum, e) => sum + convertCurrency(e.amount || 0, e.currency || 'USD', displayCurrency, ratesData.rates),
+    0
+  );
+  const rawRemainingBudget = totalPlannedSpending - totalActualSpending;
+  const isMonthOverBudget = rawRemainingBudget < 0;
+
+  const selectedMonthLabel = (() => {
+    const [yStr, mStr] = selectedMonth.split('-');
+    const y = Number(yStr);
+    const m = Number(mStr);
+    if (!y || !m) return selectedMonth;
+    return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  })();
 
   const monthIncome = payments
     .filter((p) => p.date.startsWith(selectedMonth))
@@ -145,7 +175,7 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
     addBudgetCategory({
       name: newCatName.trim(),
       monthlyLimit: Number(newCatLimit) || 100,
-      currency: 'USD',
+      currency: displayCurrency || 'USD',
       color: 'indigo',
       iconName: 'tag',
     });
@@ -214,27 +244,45 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
       {/* A. Statistics Overview Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs transition-all duration-200 hover:shadow-md hover:border-slate-300">
-          <span className="text-xs text-slate-500">Planned Budget</span>
+          <span className="text-xs text-slate-500">Monthly Limit ({selectedMonthLabel})</span>
           <p className="text-xl sm:text-2xl font-bold text-slate-900 font-mono tabular-nums mt-1 truncate">
             {formatCurrency(totalPlannedSpending, displayCurrency)}
           </p>
-          <span className="text-[10px] text-slate-400">category caps</span>
+          <span className="text-[10px] text-slate-400">
+            {hasMonthBudgetPlan ? `${matchingMonthPlans.length} active plan` : 'category caps fallback'}
+          </span>
         </div>
 
         <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs transition-all duration-200 hover:shadow-md hover:border-slate-300">
-          <span className="text-xs text-rose-600 font-semibold">Actual Spending</span>
+          <span className="text-xs text-rose-600 font-semibold">Spent ({selectedMonthLabel})</span>
           <p className="text-xl sm:text-2xl font-bold text-rose-600 font-mono tabular-nums mt-1 truncate">
             {formatCurrency(totalActualSpending, displayCurrency)}
           </p>
-          <span className="text-[10px] text-slate-400">{expenses.length} expenses logged</span>
+          <span className="text-[10px] text-slate-400">{monthExpenses.length} expenses in month</span>
         </div>
 
-        <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs transition-all duration-200 hover:shadow-md hover:border-slate-300">
-          <span className="text-xs text-emerald-600 font-semibold">Remaining Budget</span>
-          <p className="text-xl sm:text-2xl font-bold text-emerald-600 font-mono tabular-nums mt-1 truncate">
-            {formatCurrency(totalRemainingBudget, displayCurrency)}
+        <div
+          className={`p-4 bg-white rounded-xl border shadow-xs transition-all duration-200 hover:shadow-md ${
+            isMonthOverBudget ? 'border-rose-300 bg-rose-50/30' : 'border-slate-200 hover:border-slate-300'
+          }`}
+        >
+          <span
+            className={`text-xs font-semibold ${
+              isMonthOverBudget ? 'text-rose-600' : 'text-emerald-600'
+            }`}
+          >
+            {isMonthOverBudget ? 'Over Budget' : 'Left Remaining'}
+          </span>
+          <p
+            className={`text-xl sm:text-2xl font-bold font-mono tabular-nums mt-1 truncate ${
+              isMonthOverBudget ? 'text-rose-600' : 'text-emerald-600'
+            }`}
+          >
+            {formatCurrency(Math.abs(rawRemainingBudget), displayCurrency)}
           </p>
-          <span className="text-[10px] text-slate-400">unspent room</span>
+          <span className="text-[10px] text-slate-400">
+            {isMonthOverBudget ? 'exceeded month limit' : `left for ${selectedMonthLabel}`}
+          </span>
         </div>
 
         <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs transition-all duration-200 hover:shadow-md hover:border-slate-300">
@@ -242,7 +290,7 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
           <p className="text-xl sm:text-2xl font-bold text-slate-900 font-mono tabular-nums mt-1 truncate">
             {formatCurrency(monthIncome, displayCurrency)}
           </p>
-          <span className="text-[10px] text-slate-400">client cash collected</span>
+          <span className="text-[10px] text-slate-400">in {selectedMonthLabel}</span>
         </div>
 
         <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs transition-all duration-200 hover:shadow-md hover:border-slate-300">
@@ -254,7 +302,7 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
           >
             {formatCurrency(netCashFlow, displayCurrency)}
           </p>
-          <span className="text-[10px] text-slate-400">income minus expenses</span>
+          <span className="text-[10px] text-slate-400">income minus month spend</span>
         </div>
       </div>
 
@@ -316,9 +364,9 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
             <div className="space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-100">
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">Custom Planned Operating Budgets</h3>
+                  <h3 className="text-sm font-bold text-slate-900">Monthly Budget Plans</h3>
                   <p className="text-xs text-slate-500">
-                    Allocate planned targets across expense categories without counting allocations as actual paid expenses.
+                    Set monthly spending limits and track how much budget is left remaining as expenses are added.
                   </p>
                 </div>
                 <button
@@ -326,10 +374,10 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
                     setEditingPlanBudget(null);
                     setPlanBudgetModalOpen(true);
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-purple-600 hover:bg-purple-500 rounded-lg shadow-xs"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-purple-600 hover:bg-purple-500 rounded-lg shadow-xs shrink-0"
                 >
                   <Plus size={14} />
-                  <span>Create Plan Budget</span>
+                  <span>Set Monthly Limit</span>
                 </button>
               </div>
 
@@ -337,9 +385,9 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
                 <div className="p-8 bg-slate-50 border border-dashed border-slate-300 rounded-2xl text-center space-y-3">
                   <Wallet size={28} className="mx-auto text-purple-400" />
                   <div>
-                    <h4 className="text-sm font-bold text-slate-900">No Planned Budgets Yet</h4>
+                    <h4 className="text-sm font-bold text-slate-900">No Monthly Budget Set Yet</h4>
                     <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-                      Create a planned budget to track category allocations against your actual expenses.
+                      Set a monthly budget limit for {selectedMonthLabel} to track your expenses and left remaining balance.
                     </p>
                   </div>
                   <button
@@ -350,13 +398,41 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
                     className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-500 rounded-lg shadow-xs cursor-pointer"
                   >
                     <Plus size={14} />
-                    <span>Create Plan Budget</span>
+                    <span>Set Monthly Limit</span>
                   </button>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {planBudgets.map((b) => {
                     const allocations = Array.isArray(b.categoryAllocations) ? b.categoryAllocations : [];
+                    const planCurrency = b.currency || 'USD';
+                    const convertedPlanTotal = convertCurrency(
+                      b.totalPlannedBudget ?? 0,
+                      planCurrency,
+                      displayCurrency,
+                      ratesData.rates
+                    );
+                    const normalizeCat = (name: string) =>
+                      (name || '').toLowerCase().replace(/\s*&\s*/g, ' and ').trim();
+
+                    // Match expenses linked explicitly to this budget OR matching its date window (when standalone)
+                    const planMatchedExpenses = expenses.filter((e) => {
+                      if (e.budgetId) return e.budgetId === b.id;
+                      return Boolean(b.startDate && b.endDate && e.date >= b.startDate && e.date <= b.endDate);
+                    });
+
+                    const planSpent = planMatchedExpenses.reduce(
+                      (sum, e) =>
+                        sum + convertCurrency(e.amount || 0, e.currency || 'USD', displayCurrency, ratesData.rates),
+                      0
+                    );
+                    const planRemaining = convertedPlanTotal - planSpent;
+                    const planOver = planRemaining < 0;
+                    const planPctUsed =
+                      convertedPlanTotal > 0
+                        ? Math.min(100, Math.round((planSpent / convertedPlanTotal) * 100))
+                        : 0;
+
                     return (
                       <div
                         key={b.id}
@@ -364,9 +440,12 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
                       >
                         <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100">
                           <div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               <span className="px-2 py-0.5 text-[10px] font-bold uppercase rounded-md bg-purple-100 text-purple-800">
                                 {b.period || 'monthly'}
+                              </span>
+                              <span className="px-2 py-0.5 text-[10px] font-bold uppercase rounded-md bg-slate-100 text-slate-700">
+                                {planCurrency}
                               </span>
                               <span className="text-xs text-slate-500 font-mono">
                                 {b.startDate} to {b.endDate}
@@ -381,80 +460,143 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
                                 setPlanBudgetModalOpen(true);
                               }}
                               className="p-1.5 text-slate-400 hover:text-purple-600 rounded-lg transition-colors"
-                              title="Edit Plan Budget"
+                              title="Edit Budget Plan"
                             >
                               <Edit size={14} />
                             </button>
                             <button
                               onClick={() => setDeletingBudgetPlanId(b.id)}
                               className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors"
-                              title="Delete Plan Budget"
+                              title="Delete Budget Plan"
                             >
                               <Trash2 size={14} />
                             </button>
                           </div>
                         </div>
 
-                        <div className="flex items-center justify-between p-3 bg-purple-50/60 rounded-xl border border-purple-100">
-                          <div>
-                            <span className="text-xs font-semibold text-purple-900 block">Total Planned Budget</span>
-                            <span className="text-lg font-bold font-mono text-purple-900">
-                              {b.currency || 'USD'} {(b.totalPlannedBudget ?? 0).toLocaleString()}
-                            </span>
+                        {/* Monthly Limit / Spent / Left Remaining Summary */}
+                        <div className="p-3.5 bg-purple-50/50 rounded-xl border border-purple-100 space-y-3">
+                          <div className="grid grid-cols-3 gap-2">
+                            <div>
+                              <span className="text-[11px] font-medium text-slate-500 block">Monthly Limit</span>
+                              <span className="text-sm sm:text-base font-bold font-mono text-slate-900">
+                                {formatCurrency(convertedPlanTotal, displayCurrency)}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-[11px] font-medium text-rose-600 block">Spent</span>
+                              <span className="text-sm sm:text-base font-bold font-mono text-rose-600">
+                                {formatCurrency(planSpent, displayCurrency)}
+                              </span>
+                            </div>
+                            <div className="text-right">
+                              <span
+                                className={`text-[11px] font-semibold block ${
+                                  planOver ? 'text-rose-600' : 'text-emerald-600'
+                                }`}
+                              >
+                                {planOver ? 'Over Limit' : 'Left Remaining'}
+                              </span>
+                              <span
+                                className={`text-sm sm:text-base font-bold font-mono ${
+                                  planOver ? 'text-rose-600' : 'text-emerald-600'
+                                }`}
+                              >
+                                {formatCurrency(Math.abs(planRemaining), displayCurrency)}
+                              </span>
+                            </div>
                           </div>
-                          <div className="text-right">
-                            <span className="text-xs text-slate-500 block">Allocated Categories</span>
-                            <span className="text-sm font-bold text-slate-800 font-mono">
-                              {allocations.length} categories
-                            </span>
+
+                          <div className="space-y-1">
+                            <div className="w-full h-2 bg-white rounded-full overflow-hidden border border-purple-100">
+                              <div
+                                style={{ width: `${planPctUsed}%` }}
+                                className={`h-full rounded-full transition-all duration-300 ${
+                                  planOver
+                                    ? 'bg-rose-600'
+                                    : planPctUsed >= 85
+                                    ? 'bg-amber-500'
+                                    : 'bg-emerald-500'
+                                }`}
+                              />
+                            </div>
+                            <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono">
+                              <span>
+                                {planPctUsed}% used ({planMatchedExpenses.length} expense{planMatchedExpenses.length !== 1 ? 's' : ''})
+                              </span>
+                              {planCurrency !== displayCurrency && (
+                                <span>Native limit: {formatCurrency(b.totalPlannedBudget ?? 0, planCurrency)}</span>
+                              )}
+                            </div>
                           </div>
                         </div>
 
-                        {/* Category Allocations Breakdown */}
-                        <div className="space-y-2">
-                          <span className="text-xs font-bold text-slate-700 block">Category Allocations vs Actual Spending:</span>
-                          <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                            {allocations.map((alloc, idx) => {
-                              const allocCatLower = (alloc.category || '').toLowerCase();
-                              const actualSpent = expenses
-                                .filter((e) => (e.category || '').toLowerCase() === allocCatLower)
-                                .reduce((s, e) => s + (e.amount || 0), 0);
-                              const isExceeded = actualSpent > alloc.plannedAmount;
-                              const isApproaching = actualSpent >= alloc.plannedAmount * 0.85;
+                        {/* Optional Category Allocations Breakdown */}
+                        {allocations.length > 0 && (
+                          <div className="space-y-2">
+                            <span className="text-xs font-bold text-slate-700 block">Category Breakdown:</span>
+                            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                              {allocations.map((alloc, idx) => {
+                                const allocCatNormalized = normalizeCat(alloc.category);
+                                const actualSpent = planMatchedExpenses
+                                  .filter((e) => normalizeCat(e.category) === allocCatNormalized)
+                                  .reduce(
+                                    (s, e) =>
+                                      s + convertCurrency(e.amount || 0, e.currency || 'USD', displayCurrency, ratesData.rates),
+                                    0
+                                  );
+                                const plannedConverted = convertCurrency(
+                                  alloc.plannedAmount || 0,
+                                  planCurrency,
+                                  displayCurrency,
+                                  ratesData.rates
+                                );
+                                const catRemaining = plannedConverted - actualSpent;
+                                const isExceeded = actualSpent > plannedConverted;
+                                const isApproaching = plannedConverted > 0 && actualSpent >= plannedConverted * 0.85;
 
-                              return (
-                                <div
-                                  key={idx}
-                                  className={`p-2.5 rounded-xl border text-xs flex flex-col gap-1.5 ${
-                                    isExceeded
-                                      ? 'bg-rose-50 border-rose-200'
-                                      : isApproaching
-                                      ? 'bg-amber-50 border-amber-200'
-                                      : 'bg-slate-50 border-slate-200'
-                                  }`}
-                                >
-                                  <div className="flex items-center justify-between">
-                                    <span className="font-semibold text-slate-900">{alloc.category}</span>
-                                    <div className="flex items-center gap-2 font-mono">
-                                      <span className="text-slate-500">
-                                        Spent: ${actualSpent} /
-                                      </span>
-                                      <span className="font-bold text-slate-900">
-                                        Plan: ${alloc.plannedAmount}
-                                      </span>
+                                return (
+                                  <div
+                                    key={idx}
+                                    className={`p-2.5 rounded-xl border text-xs flex flex-col gap-1 ${
+                                      isExceeded
+                                        ? 'bg-rose-50 border-rose-200'
+                                        : isApproaching
+                                        ? 'bg-amber-50 border-amber-200'
+                                        : 'bg-slate-50 border-slate-200'
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="font-semibold text-slate-900 truncate">{alloc.category}</span>
+                                      <div className="flex items-center gap-2 font-mono shrink-0">
+                                        <span className="text-slate-500">
+                                          Spent: {formatCurrency(actualSpent, displayCurrency)}
+                                        </span>
+                                        <span className="font-bold text-slate-900">
+                                          / {formatCurrency(plannedConverted, displayCurrency)}
+                                        </span>
+                                      </div>
                                     </div>
-                                  </div>
-                                  {isExceeded && (
-                                    <span className="text-[10px] font-bold text-rose-600 flex items-center gap-1">
-                                      <AlertTriangle size={11} />
-                                      Exceeded planned limit by ${(actualSpent - alloc.plannedAmount).toFixed(2)}
+                                    <span
+                                      className={`text-[10px] font-semibold flex items-center gap-1 ${
+                                        isExceeded ? 'text-rose-600' : 'text-emerald-700'
+                                      }`}
+                                    >
+                                      {isExceeded ? (
+                                        <>
+                                          <AlertTriangle size={11} />
+                                          Exceeded by {formatCurrency(Math.abs(catRemaining), displayCurrency)}
+                                        </>
+                                      ) : (
+                                        <>Left remaining: {formatCurrency(catRemaining, displayCurrency)}</>
+                                      )}
                                     </span>
-                                  )}
-                                </div>
-                              );
-                            })}
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
-                        </div>
+                        )}
                       </div>
                     );
                   })}
@@ -608,7 +750,7 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
                       </button>
                     </div>
 
-                    <div className="space-y-1">
+                    <div className="space-y-1.5">
                       <div className="flex justify-between text-xs font-mono">
                         <span className="text-slate-500">Spent: {formatCurrency(cat.spent, displayCurrency)}</span>
                         <span className="font-bold text-slate-900">Cap: {formatCurrency(cat.limit, displayCurrency)}</span>
@@ -620,6 +762,14 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
                             cat.isOver ? 'bg-rose-600' : cat.pctUsed > 80 ? 'bg-amber-500' : 'bg-indigo-600'
                           }`}
                         />
+                      </div>
+                      <div className="flex justify-between items-center text-[11px] font-mono">
+                        <span className={cat.isOver ? 'text-rose-600 font-semibold' : 'text-emerald-700 font-semibold'}>
+                          {cat.isOver
+                            ? `Over limit by ${formatCurrency(Math.abs(cat.remaining), displayCurrency)}`
+                            : `Left remaining: ${formatCurrency(cat.remaining, displayCurrency)}`}
+                        </span>
+                        <span className="text-slate-400">{cat.pctUsed}%</span>
                       </div>
                     </div>
                   </div>
@@ -683,6 +833,7 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
         onSavePlanBudget={addPlanBudget}
         editingBudget={editingPlanBudget}
         onUpdatePlanBudget={updatePlanBudget}
+        defaultMonth={selectedMonth}
       />
 
       {/* Expense Modal */}
@@ -780,7 +931,9 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Monthly Threshold ($)</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Monthly Threshold ({CURRENCY_SYMBOLS[displayCurrency] || displayCurrency})
+                </label>
                 <input
                   type="number"
                   min="0"

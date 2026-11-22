@@ -15,7 +15,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { formatCurrency } from '../../services/currency';
+import { formatCurrency, convertCurrency } from '../../services/currency';
 import { Task, Invoice } from '../../types';
 
 interface ClientDetailModalProps {
@@ -33,7 +33,7 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
   onOpenRecordPaymentWithClient,
   onOpenCreateInvoiceWithClient,
 }) => {
-  const { clients, tasks, payments, invoices, timeEntries, startTimer, updateClient } = useApp();
+  const { clients, tasks, payments, invoices, timeEntries, startTimer, updateClient, ratesData } = useApp();
   const [activeTab, setActiveTab] = useState<'projects' | 'invoices' | 'payments' | 'time'>('projects');
 
   if (!clientId) return null;
@@ -46,9 +46,16 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
   const clientInvoices = invoices.filter((inv) => inv.clientId === client.id);
   const clientTimeEntries = timeEntries.filter((te) => te.clientId === client.id);
 
-  // Financial reconciliations
-  const agreedTotal = clientTasks.reduce((sum, t) => sum + t.projectPrice, 0);
-  const totalPaid = clientPayments.reduce((sum, p) => sum + p.amount, 0);
+  // Financial reconciliations (converted to client's preferredCurrency)
+  const clientCurrency = client.preferredCurrency || 'USD';
+  const agreedTotal = clientTasks.reduce(
+    (sum, t) => sum + convertCurrency(t.projectPrice || 0, t.currency || clientCurrency, clientCurrency, ratesData.rates),
+    0
+  );
+  const totalPaid = clientPayments.reduce(
+    (sum, p) => sum + convertCurrency(p.amount || 0, p.currency || clientCurrency, clientCurrency, ratesData.rates),
+    0
+  );
   const outstandingBalance = Math.max(0, agreedTotal - totalPaid);
   const totalTrackedSeconds = clientTimeEntries.reduce((sum, te) => sum + te.durationSeconds, 0);
 
@@ -158,8 +165,8 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
                 </div>
               )}
               <div className="flex items-center justify-between pt-2 border-t border-slate-200 text-slate-500">
-                <span>Preferred Currency: <strong className="text-slate-800">{client.preferredCurrency}</strong></span>
-                <span>Rate: <strong className="text-slate-800">${client.hourlyRate}/h</strong></span>
+                <span>Preferred Currency: <strong className="text-slate-800">{clientCurrency}</strong></span>
+                <span>Rate: <strong className="text-slate-800">{formatCurrency(client.hourlyRate || 0, clientCurrency)}/h</strong></span>
               </div>
             </div>
 
@@ -352,7 +359,7 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
                             {(te.durationSeconds / 3600).toFixed(2)} hrs
                           </p>
                           <p className="text-[10px] text-emerald-600">
-                            {formatCurrency(te.billableAmount, 'USD')}
+                            {formatCurrency(te.billableAmount, clientCurrency)}
                           </p>
                         </div>
                       </div>

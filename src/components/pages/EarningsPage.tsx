@@ -116,14 +116,15 @@ export const EarningsPage: React.FC<EarningsPageProps> = ({
   const netProjectEarnings = grossProjectsValue - totalPlatformFees;
 
   // Monthly Earnings Goal Progress
-  const targetMonthlyGoal = goals.find((g) => g.name.includes('October Target'))?.targetValue || 6000;
+  const rawMonthlyGoal = goals.find((g) => g.name.includes('October Target'))?.targetValue || 6000;
+  const targetMonthlyGoal = convertCurrency(rawMonthlyGoal, 'USD', displayCurrency, ratesData.rates);
   const currentMonthCash = payments
     .filter((p) => p.date.startsWith(currentMonthPrefix))
     .reduce(
       (sum, p) => sum + convertCurrency(p.amount, p.currency, displayCurrency, ratesData.rates),
       0
     );
-  const goalPercentage = Math.min(100, Math.round((currentMonthCash / targetMonthlyGoal) * 100));
+  const goalPercentage = targetMonthlyGoal > 0 ? Math.min(100, Math.round((currentMonthCash / targetMonthlyGoal) * 100)) : 0;
   const remainingNeeded = Math.max(0, targetMonthlyGoal - currentMonthCash);
 
   // Earnings by Client

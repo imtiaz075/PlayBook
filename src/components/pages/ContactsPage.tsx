@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Client, ClientStatus } from '../../types';
-import { formatCurrency } from '../../services/currency';
+import { formatCurrency, convertCurrency } from '../../services/currency';
 import { InfoTooltip } from '../common/Tooltip';
 import { ContactModal } from '../modals/ContactModal';
 
@@ -33,7 +33,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
   onOpenClientDetails,
   onOpenNewTaskWithClient,
 }) => {
-  const { clients, tasks, payments, invoices, timeEntries, updateClient, deleteClient } = useApp();
+  const { clients, tasks, payments, invoices, timeEntries, updateClient, deleteClient, displayCurrency, ratesData } = useApp();
 
   const [statusTab, setStatusTab] = useState<'active' | 'archived' | 'all'>('active');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
@@ -66,7 +66,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
 
   const totalOutstandingBalance = tasks.reduce((sum, t) => {
     const bal = Math.max(0, t.projectPrice - (t.amountPaid || 0));
-    return sum + bal;
+    return sum + convertCurrency(bal, t.currency || 'USD', displayCurrency, ratesData.rates);
   }, 0);
 
   return (
@@ -110,7 +110,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
         <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs transition-all duration-200 hover:shadow-md hover:border-slate-300">
           <span className="text-xs text-amber-600 font-medium">Outstanding Client Balances</span>
           <p className="text-2xl font-bold text-amber-700 font-mono tabular-nums mt-1">
-            {formatCurrency(totalOutstandingBalance, 'USD')}
+            {formatCurrency(totalOutstandingBalance, displayCurrency)}
           </p>
           <span className="text-[10px] text-slate-400">pending payment collection</span>
         </div>
@@ -198,9 +198,16 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
             const completedCount = clientTasks.filter((t) => t.status === 'completed').length;
 
             const clientPayments = payments.filter((p) => p.clientId === client.id);
-            const totalPaid = clientPayments.reduce((sum, p) => sum + p.amount, 0);
+            const clientCurr = client.preferredCurrency || 'USD';
+            const totalPaid = clientPayments.reduce(
+              (sum, p) => sum + convertCurrency(p.amount, p.currency || clientCurr, clientCurr, ratesData.rates),
+              0
+            );
 
-            const agreedTotal = clientTasks.reduce((sum, t) => sum + t.projectPrice, 0);
+            const agreedTotal = clientTasks.reduce(
+              (sum, t) => sum + convertCurrency(t.projectPrice, t.currency || clientCurr, clientCurr, ratesData.rates),
+              0
+            );
             const outstandingBalance = Math.max(0, agreedTotal - totalPaid);
 
             const trackedSeconds = timeEntries

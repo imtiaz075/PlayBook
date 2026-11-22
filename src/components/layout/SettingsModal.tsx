@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { playNotificationChime } from '../../services/audio';
+import { CURRENCY_SYMBOLS } from '../../services/currency';
 
 export const SettingsModal: React.FC = () => {
   const {
@@ -162,7 +163,9 @@ export const SettingsModal: React.FC = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Default Hourly Rate ($)</label>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    Default Hourly Rate ({CURRENCY_SYMBOLS[formData.defaultCurrency] || formData.defaultCurrency})
+                  </label>
                   <input
                     type="number"
                     value={formData.defaultHourlyRate}

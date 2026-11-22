@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, UserPlus, Save } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Client } from '../../types';
+import { CURRENCY_SYMBOLS } from '../../services/currency';
 
 interface ContactModalProps {
   isOpen: boolean;
@@ -254,7 +255,7 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose, edi
                   onChange={(e) => setPreferredCurrency(e.target.value)}
                   className="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white"
                 >
-                  {['USD', 'USDT', 'EUR', 'GBP', 'CAD', 'AUD', 'INR', 'AED'].map((c) => (
+                  {['USD', 'PKR', 'USDT', 'EUR', 'GBP', 'CAD', 'AUD', 'INR', 'BDT', 'AED', 'SAR'].map((c) => (
                     <option key={c} value={c}>
                       {c}
                     </option>
@@ -264,7 +265,9 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose, edi
 
               {pricingType === 'hourly' ? (
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Hourly Rate ($/h)</label>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    Hourly Rate ({CURRENCY_SYMBOLS[preferredCurrency] || preferredCurrency}/h)
+                  </label>
                   <input
                     type="number"
                     min="0"
@@ -275,7 +278,9 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose, edi
                 </div>
               ) : (
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Agreed Fixed Amount ($)</label>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    Agreed Fixed Amount ({CURRENCY_SYMBOLS[preferredCurrency] || preferredCurrency})
+                  </label>
                   <input
                     type="number"
                     min="0"

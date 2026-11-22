@@ -100,7 +100,7 @@ export const CURRENCY_SYMBOLS: Record<string, string> = {
   USDT: 'USDT',
   EUR: '€',
   GBP: '£',
-  PKR: '₨',
+  PKR: 'Rs',
   INR: '₹',
   BDT: '৳',
   AED: 'AED',
@@ -121,16 +121,22 @@ export function formatCurrency(
 ): string {
   const code = currencyCode.toUpperCase();
   const symbol = CURRENCY_SYMBOLS[code] || code;
-  const formattedNum = Number(amount || 0).toLocaleString(undefined, {
+  const numericAmount = Number(amount || 0);
+  const isNegative = numericAmount < 0;
+  const formattedNum = Math.abs(numericAmount).toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+  const prefix = isNegative ? '-' : '';
 
-  if (!showSymbol) return formattedNum;
+  if (!showSymbol) return `${prefix}${formattedNum}`;
   if (code === 'USDT' || code === 'AED' || code === 'SAR') {
-    return `${formattedNum} ${code}`;
+    return `${prefix}${formattedNum} ${code}`;
   }
-  return `${symbol}${formattedNum}`;
+  if (code === 'PKR') {
+    return `${prefix}Rs ${formattedNum}`;
+  }
+  return `${prefix}${symbol}${formattedNum}`;
 }
 
 export function convertCurrency(

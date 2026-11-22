@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Task, TaskStatus, PlatformType, Priority } from '../../types';
-import { formatCurrency } from '../../services/currency';
+import { formatCurrency, convertCurrency } from '../../services/currency';
 import { CountdownBadge } from '../common/CountdownBadge';
 import { InfoTooltip } from '../common/Tooltip';
 import { TaskModal } from '../modals/TaskModal';
@@ -51,10 +51,13 @@ export const TasksPage: React.FC<TasksPageProps> = ({
     formatTimerTime,
     timeEntries,
     settings,
+    displayCurrency,
+    ratesData,
   } = useApp();
 
-  const [statusFilter, setStatusFilter] = useState<'in_progress' | 'open' | 'completed' | 'overdue' | 'all'>('in_progress');
+  const [statusFilter, setStatusFilter] = useState<'open' | 'in_progress' | 'overdue' | 'completed'>('open');
   const [platformFilter, setPlatformFilter] = useState<string>('all');
+  const [completedMonthFilter, setCompletedMonthFilter] = useState<string>('all');
   const [selectedTaskForDetail, setSelectedTaskForDetail] = useState<Task | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
 
@@ -79,6 +82,79 @@ export const TasksPage: React.FC<TasksPageProps> = ({
     return Array.from(set);
   }, [tasks]);
 
+  const getTaskCompletionMonth = (t: Task): string => {
+    return (t.completedAt || t.updatedAt || t.deadline || todayStr).substring(0, 7);
+  };
+
+  const formatMonthLabel = (ym: string): string => {
+    if (ym === 'all') return 'All Months';
+    const [yStr, mStr] = ym.split('-');
+    const y = Number(yStr);
+    const m = Number(mStr);
+    if (!y || !m) return ym;
+    return new Date(y, m - 1, 1).toLocaleDateString('en-US', {
+      month: 'long',
+      year: 'numeric',
+    });
+  };
+
+  // All completed tasks (optionally scoped by platformFilter for dropdown counts)
+  const completedTasksAll = useMemo(
+    () => tasks.filter((t) => t.status === 'completed'),
+    [tasks]
+  );
+
+  // Build available month options (last 12 months + any month from completed tasks), newest first
+  const availableCompletedMonths = useMemo(() => {
+    const monthSet = new Set<string>();
+    const now = new Date();
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      monthSet.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    }
+    completedTasksAll.forEach((t) => {
+      const ym = getTaskCompletionMonth(t);
+      if (/^\d{4}-\d{2}$/.test(ym)) {
+        monthSet.add(ym);
+      }
+    });
+    return Array.from(monthSet).sort((a, b) => b.localeCompare(a));
+  }, [completedTasksAll]);
+
+  // Count completed tasks per month (respecting selected platformFilter)
+  const completedMonthCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    completedTasksAll.forEach((t) => {
+      if (platformFilter !== 'all' && t.platform !== platformFilter) return;
+      const ym = getTaskCompletionMonth(t);
+      counts[ym] = (counts[ym] || 0) + 1;
+    });
+    return counts;
+  }, [completedTasksAll, platformFilter]);
+
+  const totalCompletedForPlatformFilter = useMemo(
+    () =>
+      completedTasksAll.filter(
+        (t) => platformFilter === 'all' || t.platform === platformFilter
+      ).length,
+    [completedTasksAll, platformFilter]
+  );
+
+  // Completed count per platform for the currently selected month
+  const completedByPlatformForMonth = useMemo(() => {
+    const counts: Record<string, number> = {};
+    allPlatforms.forEach((p) => {
+      counts[p] = 0;
+    });
+    completedTasksAll.forEach((t) => {
+      if (completedMonthFilter !== 'all' && getTaskCompletionMonth(t) !== completedMonthFilter) {
+        return;
+      }
+      counts[t.platform] = (counts[t.platform] || 0) + 1;
+    });
+    return counts;
+  }, [allPlatforms, completedTasksAll, completedMonthFilter]);
+
   // Global Statistics
   const openCount = tasks.filter((t) => t.status === 'open').length;
   const inProgressCount = tasks.filter((t) => t.status === 'in_progress').length;
@@ -92,9 +168,15 @@ export const TasksPage: React.FC<TasksPageProps> = ({
     if (platformFilter !== 'all' && t.platform !== platformFilter) {
       return false;
     }
-    if (statusFilter === 'all') return true;
     if (statusFilter === 'overdue') {
       return t.status !== 'completed' && t.status !== 'cancelled' && t.deadline < todayStr;
+    }
+    if (statusFilter === 'completed') {
+      if (t.status !== 'completed') return false;
+      if (completedMonthFilter !== 'all' && getTaskCompletionMonth(t) !== completedMonthFilter) {
+        return false;
+      }
+      return true;
     }
     return t.status === statusFilter;
   });
@@ -170,11 +252,11 @@ export const TasksPage: React.FC<TasksPageProps> = ({
       {/* Task Statistics */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs transition-all duration-200 hover:shadow-md hover:border-slate-300">
-          <span className="text-xs text-slate-500">All Projects</span>
-          <p className="text-2xl font-bold text-slate-900 font-mono tabular-nums mt-1">
-            {tasks.length}
+          <span className="text-xs text-slate-600 font-medium">Open Backlog</span>
+          <p className="text-2xl font-bold text-slate-700 font-mono tabular-nums mt-1">
+            {openCount}
           </p>
-          <span className="text-[10px] text-slate-400">total tracked</span>
+          <span className="text-[10px] text-slate-400">queued work</span>
         </div>
 
         <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs transition-all duration-200 hover:shadow-md hover:border-slate-300">
@@ -186,11 +268,11 @@ export const TasksPage: React.FC<TasksPageProps> = ({
         </div>
 
         <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs transition-all duration-200 hover:shadow-md hover:border-slate-300">
-          <span className="text-xs text-slate-600 font-medium">Open Backlog</span>
-          <p className="text-2xl font-bold text-slate-700 font-mono tabular-nums mt-1">
-            {openCount}
+          <span className="text-xs text-rose-600 font-medium">Overdue</span>
+          <p className="text-2xl font-bold text-rose-600 font-mono tabular-nums mt-1">
+            {overdueCount}
           </p>
-          <span className="text-[10px] text-slate-400">queued work</span>
+          <span className="text-[10px] text-slate-400">needs attention</span>
         </div>
 
         <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs transition-all duration-200 hover:shadow-md hover:border-slate-300">
@@ -202,24 +284,23 @@ export const TasksPage: React.FC<TasksPageProps> = ({
         </div>
 
         <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs transition-all duration-200 hover:shadow-md hover:border-slate-300">
-          <span className="text-xs text-rose-600 font-medium">Overdue</span>
-          <p className="text-2xl font-bold text-rose-600 font-mono tabular-nums mt-1">
-            {overdueCount}
+          <span className="text-xs text-slate-500">All Projects</span>
+          <p className="text-2xl font-bold text-slate-900 font-mono tabular-nums mt-1">
+            {tasks.length}
           </p>
-          <span className="text-[10px] text-slate-400">needs attention</span>
+          <span className="text-[10px] text-slate-400">total tracked</span>
         </div>
       </div>
 
-      {/* Filter Tabs & Platform Dropdown */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+      {/* Filter Tabs, Month Dropdown (Completed), & Platform Dropdown */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
         {/* Status Tabs */}
         <div className="flex items-center gap-1 overflow-x-auto text-xs font-medium">
           {[
-            { id: 'in_progress', label: 'In Progress' },
             { id: 'open', label: 'Open' },
-            { id: 'completed', label: 'Completed' },
+            { id: 'in_progress', label: 'In Progress' },
             { id: 'overdue', label: 'Overdue' },
-            { id: 'all', label: 'All Projects' },
+            { id: 'completed', label: 'Completed' },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -235,37 +316,129 @@ export const TasksPage: React.FC<TasksPageProps> = ({
           ))}
         </div>
 
-        {/* Platform Filter */}
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-xs text-slate-500 font-medium">Platform:</span>
-          <select
-            value={platformFilter}
-            onChange={(e) => setPlatformFilter(e.target.value)}
-            className="text-xs px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-          >
-            <option value="all">All Platforms</option>
-            {allPlatforms.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
+        {/* Dropdown Filters */}
+        <div className="flex flex-wrap items-center gap-3 shrink-0">
+          {statusFilter === 'completed' && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500 font-medium">Month:</span>
+              <select
+                value={completedMonthFilter}
+                onChange={(e) => setCompletedMonthFilter(e.target.value)}
+                aria-label="Filter completed tasks by month"
+                className="text-xs px-2.5 py-1.5 border border-indigo-200 rounded-lg bg-indigo-50/50 font-semibold text-indigo-900 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+              >
+                <option value="all">
+                  All Months ({totalCompletedForPlatformFilter})
+                </option>
+                {availableCompletedMonths.map((ym) => (
+                  <option key={ym} value={ym}>
+                    {formatMonthLabel(ym)} ({completedMonthCounts[ym] || 0})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500 font-medium">Platform:</span>
+            <select
+              value={platformFilter}
+              onChange={(e) => setPlatformFilter(e.target.value)}
+              aria-label="Filter tasks by platform"
+              className="text-xs px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+            >
+              <option value="all">All Platforms</option>
+              {allPlatforms.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
+      {/* Monthly Completed Breakdown Across All Listed Platforms */}
+      {statusFilter === 'completed' && (
+        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+              <h2 className="text-xs font-bold text-slate-900">
+                Completed Tasks by Platform — {formatMonthLabel(completedMonthFilter)}
+              </h2>
+            </div>
+            <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg self-start sm:self-auto font-mono tabular-nums">
+              {filteredTasks.length} completed task{filteredTasks.length !== 1 ? 's' : ''}
+              {platformFilter !== 'all' ? ` (${platformFilter})` : ''}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
+            {allPlatforms.map((platform) => {
+              const count = completedByPlatformForMonth[platform] || 0;
+              const isSelected = platformFilter === platform;
+              return (
+                <button
+                  key={platform}
+                  type="button"
+                  onClick={() => setPlatformFilter(isSelected ? 'all' : platform)}
+                  className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-indigo-50 border-indigo-400 ring-1 ring-indigo-400'
+                      : count > 0
+                      ? 'bg-emerald-50/40 border-emerald-200 hover:border-emerald-300'
+                      : 'bg-slate-50 border-slate-200 hover:border-slate-300 opacity-75'
+                  }`}
+                >
+                  <span className="text-[11px] font-medium text-slate-600 block truncate">
+                    {platform}
+                  </span>
+                  <span
+                    className={`text-lg font-bold font-mono tabular-nums mt-0.5 block ${
+                      count > 0 ? 'text-emerald-700' : 'text-slate-400'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Platform-Based Organization Sections */}
       <div className="space-y-6">
+        {sortedTasks.length === 0 && (
+          <div className="p-10 bg-white rounded-xl border border-slate-200 text-center text-slate-400">
+            <CheckSquare size={28} className="mx-auto mb-2 opacity-40" />
+            <p className="text-xs font-semibold text-slate-700">
+              No {statusFilter.replace('_', ' ')} tasks found
+              {statusFilter === 'completed' && completedMonthFilter !== 'all'
+                ? ` in ${formatMonthLabel(completedMonthFilter)}`
+                : ''}
+              {platformFilter !== 'all' ? ` for ${platformFilter}` : ''}.
+            </p>
+          </div>
+        )}
         {allPlatforms.map((platform) => {
           const platformTasks = tasksByPlatform[platform] || [];
           if (platformFilter !== 'all' && platform !== platformFilter) return null;
           if (platformTasks.length === 0 && platformFilter === 'all') return null;
 
-          // Platform metrics
+          // Platform metrics (converted to active display currency)
           const activeProjects = platformTasks.filter((t) => t.status !== 'completed' && t.status !== 'cancelled').length;
           const completedProjects = platformTasks.filter((t) => t.status === 'completed').length;
-          const grossVal = platformTasks.reduce((sum, t) => sum + t.projectPrice, 0);
           const feePct = settings.platformFees[platform] ?? 0;
-          const estimatedFees = platformTasks.reduce((sum, t) => sum + (t.projectPrice * (t.platformFeePercentage ?? feePct)) / 100, 0);
+          const grossVal = platformTasks.reduce(
+            (sum, t) => sum + convertCurrency(t.projectPrice || 0, t.currency || 'USD', displayCurrency, ratesData.rates),
+            0
+          );
+          const estimatedFees = platformTasks.reduce((sum, t) => {
+            const convertedPrice = convertCurrency(t.projectPrice || 0, t.currency || 'USD', displayCurrency, ratesData.rates);
+            return sum + (convertedPrice * (t.platformFeePercentage ?? feePct)) / 100;
+          }, 0);
           const netEarnings = grossVal - estimatedFees;
 
           return (
@@ -295,15 +468,15 @@ export const TasksPage: React.FC<TasksPageProps> = ({
                   </div>
                   <div>
                     <span className="text-slate-400">Gross: </span>
-                    <span className="font-bold text-slate-800 font-mono tabular-nums">${grossVal.toLocaleString()}</span>
+                    <span className="font-bold text-slate-800 font-mono tabular-nums">{formatCurrency(grossVal, displayCurrency)}</span>
                   </div>
                   <div>
                     <span className="text-slate-400">Est. Fees: </span>
-                    <span className="font-bold text-rose-600 font-mono tabular-nums">-${estimatedFees.toLocaleString()}</span>
+                    <span className="font-bold text-rose-600 font-mono tabular-nums">-{formatCurrency(estimatedFees, displayCurrency)}</span>
                   </div>
                   <div className="bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
                     <span className="text-emerald-700 font-semibold">Est. Net: </span>
-                    <span className="font-bold text-emerald-800 font-mono tabular-nums">${netEarnings.toLocaleString()}</span>
+                    <span className="font-bold text-emerald-800 font-mono tabular-nums">{formatCurrency(netEarnings, displayCurrency)}</span>
                   </div>
                 </div>
               </div>

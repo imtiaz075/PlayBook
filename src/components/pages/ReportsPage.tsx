@@ -287,31 +287,33 @@ export const ReportsPage: React.FC = () => {
   const highestEarningClient = useMemo(() => {
     const map: Record<string, number> = {};
     payments.forEach((p) => {
-      map[p.clientName] = (map[p.clientName] || 0) + p.amount;
+      const converted = convertCurrency(p.amount, p.currency || 'USD', displayCurrency, ratesData.rates);
+      map[p.clientName] = (map[p.clientName] || 0) + converted;
     });
     const sorted = Object.entries(map).sort((a, b) => b[1] - a[1]);
     return sorted[0] ? { name: sorted[0][0], amount: sorted[0][1] } : null;
-  }, [payments]);
+  }, [payments, displayCurrency, ratesData.rates]);
 
   const mostProfitablePlatform = useMemo(() => {
     const map: Record<string, number> = {};
     tasks.forEach((t) => {
       const fee = (t.projectPrice * t.platformFeePercentage) / 100;
-      const net = t.projectPrice - fee;
+      const net = convertCurrency(t.projectPrice - fee, t.currency || 'USD', displayCurrency, ratesData.rates);
       map[t.platform] = (map[t.platform] || 0) + net;
     });
     const sorted = Object.entries(map).sort((a, b) => b[1] - a[1]);
     return sorted[0] ? { platform: sorted[0][0], net: sorted[0][1] } : null;
-  }, [tasks]);
+  }, [tasks, displayCurrency, ratesData.rates]);
 
   const topExpenseCategory = useMemo(() => {
     const map: Record<string, number> = {};
     monthExpenses.forEach((e) => {
-      map[e.category] = (map[e.category] || 0) + e.amount;
+      const converted = convertCurrency(e.amount, e.currency || 'USD', displayCurrency, ratesData.rates);
+      map[e.category] = (map[e.category] || 0) + converted;
     });
     const sorted = Object.entries(map).sort((a, b) => b[1] - a[1]);
     return sorted[0] ? { category: sorted[0][0], amount: sorted[0][1] } : null;
-  }, [monthExpenses]);
+  }, [monthExpenses, displayCurrency, ratesData.rates]);
 
   // 5. Export Actions
   const handleExportExcel = () => {
@@ -564,7 +566,9 @@ export const ReportsPage: React.FC = () => {
                   {highestEarningClient ? highestEarningClient.name : 'N/A'}
                 </p>
                 <span className="text-emerald-400 font-mono tabular-nums">
-                  {highestEarningClient ? formatCurrency(highestEarningClient.amount, 'USD') : '$0'}
+                  {highestEarningClient
+                    ? formatCurrency(highestEarningClient.amount, displayCurrency)
+                    : formatCurrency(0, displayCurrency)}
                 </span>
               </div>
 
@@ -574,7 +578,10 @@ export const ReportsPage: React.FC = () => {
                   {mostProfitablePlatform ? mostProfitablePlatform.platform : 'Direct Work'}
                 </p>
                 <span className="text-indigo-300 font-mono tabular-nums">
-                  {mostProfitablePlatform ? formatCurrency(mostProfitablePlatform.net, 'USD') : '$0'} net
+                  {mostProfitablePlatform
+                    ? formatCurrency(mostProfitablePlatform.net, displayCurrency)
+                    : formatCurrency(0, displayCurrency)}{' '}
+                  net
                 </span>
               </div>
 
@@ -584,7 +591,9 @@ export const ReportsPage: React.FC = () => {
                   {topExpenseCategory ? topExpenseCategory.category : 'Operations'}
                 </p>
                 <span className="text-rose-300 font-mono tabular-nums">
-                  {topExpenseCategory ? formatCurrency(topExpenseCategory.amount, 'USD') : '$0'}
+                  {topExpenseCategory
+                    ? formatCurrency(topExpenseCategory.amount, displayCurrency)
+                    : formatCurrency(0, displayCurrency)}
                 </span>
               </div>
 

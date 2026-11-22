@@ -16,7 +16,7 @@ import {
 import { ResponsiveContainer, LineChart, Line, XAxis, Tooltip } from 'recharts';
 import { useApp } from '../../context/AppContext';
 import { TimeEntry } from '../../types';
-import { formatCurrency } from '../../services/currency';
+import { formatCurrency, convertCurrency, CURRENCY_SYMBOLS } from '../../services/currency';
 import { InfoTooltip } from '../common/Tooltip';
 import { ManualTimeModal } from '../modals/ManualTimeModal';
 
@@ -40,6 +40,8 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
     tasks,
     clients,
     settings,
+    displayCurrency,
+    ratesData,
   } = useApp();
 
   const [dateFilter, setDateFilter] = useState<'today' | 'week' | 'month' | 'all'>('today');
@@ -86,6 +88,20 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
     return defaultRate;
   };
 
+  const resolveEntryCurrency = (taskId?: string, clientId?: string): string => {
+    if (taskId) {
+      const foundTask = tasks.find((t) => t.id === taskId);
+      if (foundTask?.currency) return foundTask.currency;
+      const foundClient = clients.find((c) => c.id === (foundTask?.clientId || clientId));
+      if (foundClient?.preferredCurrency) return foundClient.preferredCurrency;
+    }
+    if (clientId) {
+      const foundClient = clients.find((c) => c.id === clientId);
+      if (foundClient?.preferredCurrency) return foundClient.preferredCurrency;
+    }
+    return settings.defaultCurrency || 'USD';
+  };
+
   const selectedTask = tasks.find((t) => t.id === selectedTaskId);
   const selectedClient = clients.find((c) => c.id === selectedClientId);
   const previewHourlyRate = resolveEffectiveHourlyRate(
@@ -95,6 +111,10 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
   const activeOrPreviewRate = activeTimer.isRunning
     ? (activeTimer.hourlyRate > 0 ? activeTimer.hourlyRate : defaultRate)
     : previewHourlyRate;
+  const activeRateCurrency = activeTimer.isRunning
+    ? resolveEntryCurrency(activeTimer.projectId, activeTimer.clientId)
+    : resolveEntryCurrency(selectedTaskId || undefined, selectedClientId || undefined);
+  const activeRateSymbol = CURRENCY_SYMBOLS[activeRateCurrency] || activeRateCurrency;
 
   // Compute live elapsed seconds for active timer
   const now = Date.now();
@@ -105,6 +125,12 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
 
   const liveBillableAmount = Number(
     ((liveElapsedSeconds / 3600) * activeOrPreviewRate).toFixed(2)
+  );
+  const liveBillableDisplay = convertCurrency(
+    liveBillableAmount,
+    activeRateCurrency,
+    displayCurrency,
+    ratesData.rates
   );
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -133,7 +159,10 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
 
   const billableValue = filteredTimeEntries
     .filter((te) => te.isBillable)
-    .reduce((sum, te) => sum + te.billableAmount, 0);
+    .reduce((sum, te) => {
+      const entryCurr = resolveEntryCurrency(te.projectId, te.clientId);
+      return sum + convertCurrency(te.billableAmount, entryCurr, displayCurrency, ratesData.rates);
+    }, 0);
 
   // 7-Day Sparkline Trend Chart Data
   const sparklineData = useMemo(() => {
@@ -220,12 +249,12 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
             </h2>
             <p className="text-xs text-slate-300 max-w-lg leading-relaxed">
               {activeTimer.isRunning
-                ? `Tracking billable hours for ${activeTimer.clientName} at $${activeOrPreviewRate}/hr.`
+                ? `Tracking billable hours for ${activeTimer.clientName} at ${activeRateSymbol} ${activeOrPreviewRate}/hr.`
                 : selectedTask
-                ? `Ready to track "${selectedTask.name}" (${selectedTask.clientName}) at $${previewHourlyRate}/hr.`
+                ? `Ready to track "${selectedTask.name}" (${selectedTask.clientName}) at ${activeRateSymbol} ${previewHourlyRate}/hr.`
                 : selectedClient
-                ? `Ready to track hourly work for ${selectedClient.fullName} at $${previewHourlyRate}/hr.`
-                : `Choose a client or task to start billable time tracking (default rate: $${previewHourlyRate}/hr).`}
+                ? `Ready to track hourly work for ${selectedClient.fullName} at ${activeRateSymbol} ${previewHourlyRate}/hr.`
+                : `Choose a client or task to start billable time tracking (default rate: ${activeRateSymbol} ${previewHourlyRate}/hr).`}
             </p>
           </div>
 
@@ -238,7 +267,7 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
                 {formatTimerTime(liveElapsedSeconds)}
               </span>
               <span className="text-[11px] text-emerald-400 font-mono block mt-0.5">
-                Est. Value: {formatCurrency(liveBillableAmount, 'USD')} (${activeOrPreviewRate}/hr)
+                Est. Value: {formatCurrency(liveBillableDisplay, displayCurrency)} ({activeRateSymbol} {activeOrPreviewRate}/hr)
               </span>
             </div>
 
@@ -258,11 +287,14 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
                     className="bg-slate-800 text-white text-xs rounded-xl px-3 py-2.5 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:max-w-[180px] truncate cursor-pointer"
                   >
                     <option value="">All Clients / General</option>
-                    {clients.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.fullName}{c.hourlyRate ? ` ($${c.hourlyRate}/hr)` : ''}
-                      </option>
-                    ))}
+                    {clients.map((c) => {
+                      const cSym = CURRENCY_SYMBOLS[c.preferredCurrency || 'USD'] || c.preferredCurrency || '$';
+                      return (
+                        <option key={c.id} value={c.id}>
+                          {c.fullName}{c.hourlyRate ? ` (${cSym} ${c.hourlyRate}/hr)` : ''}
+                        </option>
+                      );
+                    })}
                   </select>
                   <select
                     value={selectedTaskId}
@@ -284,9 +316,10 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
                     </option>
                     {activeTasksForSelect.map((task) => {
                       const effRate = resolveEffectiveHourlyRate(task.id, task.clientId);
+                      const tSym = CURRENCY_SYMBOLS[task.currency || 'USD'] || task.currency || '$';
                       return (
                         <option key={task.id} value={task.id}>
-                          {task.name} ({task.clientName} · ${effRate}/hr)
+                          {task.name} ({task.clientName} · {tSym} {effRate}/hr)
                         </option>
                       );
                     })}
@@ -383,7 +416,7 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
             <div className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-xs transition-all duration-200 hover:shadow-md hover:border-slate-300">
               <span className="text-xs text-emerald-600 font-medium">Billable Value</span>
               <p className="text-2xl font-bold text-emerald-600 font-mono tabular-nums mt-1.5">
-                {formatCurrency(billableValue, 'USD')}
+                {formatCurrency(billableValue, displayCurrency)}
               </p>
               <span className="text-[10px] text-slate-400 block mt-0.5">calculated earnings</span>
             </div>
@@ -471,6 +504,14 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
               ) : (
                 filteredTimeEntries.map((entry) => {
                   const hrs = (entry.durationSeconds / 3600).toFixed(2);
+                  const entryCurr = resolveEntryCurrency(entry.projectId, entry.clientId);
+                  const entrySym = CURRENCY_SYMBOLS[entryCurr] || entryCurr;
+                  const convertedBillable = convertCurrency(
+                    entry.billableAmount,
+                    entryCurr,
+                    displayCurrency,
+                    ratesData.rates
+                  );
                   return (
                     <tr key={entry.id} className="hover:bg-slate-50/70 transition-colors">
                       <td className="py-4 px-6 font-mono tabular-nums text-slate-600">
@@ -487,10 +528,10 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
                         {hrs} hrs
                       </td>
                       <td className="py-4 px-6 text-right font-mono tabular-nums text-slate-600">
-                        ${entry.hourlyRate}/h
+                        {entrySym} {entry.hourlyRate}/h
                       </td>
                       <td className="py-4 px-6 text-right font-mono tabular-nums font-bold text-slate-900">
-                        {formatCurrency(entry.billableAmount, 'USD')}
+                        {formatCurrency(convertedBillable, displayCurrency)}
                       </td>
                       <td className="py-4 px-6 text-right flex items-center justify-end gap-1.5">
                         <button

@@ -23,7 +23,7 @@ import {
   PlanBudget,
   BudgetCategoryAllocation,
 } from '../types';
-import { getStoredRates, saveRates, fetchLiveRates, ExchangeRatesData } from '../services/currency';
+import { getStoredRates, saveRates, fetchLiveRates, ExchangeRatesData, CURRENCY_SYMBOLS } from '../services/currency';
 import { playNotificationChime } from '../services/audio';
 import { parseDeadlineTarget, TWELVE_HOURS_MS } from '../services/deadline';
 import { useAuth } from './AuthContext';
@@ -1313,6 +1313,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let resolvedClientId = clientId || '';
     const defaultRate = settings.defaultHourlyRate > 0 ? settings.defaultHourlyRate : 50;
     let rate = defaultRate;
+    let rateCurrency = settings.defaultCurrency || 'USD';
 
     if (projectId) {
       const foundTask = tasks.find((t) => t.id === projectId);
@@ -1321,6 +1322,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         cName = foundTask.clientName;
         resolvedClientId = foundTask.clientId || resolvedClientId;
         const foundClient = clients.find((c) => c.id === resolvedClientId);
+        rateCurrency = foundTask.currency || foundClient?.preferredCurrency || rateCurrency;
 
         if (foundTask.priceType === 'hourly' && typeof foundTask.hourlyRate === 'number' && foundTask.hourlyRate > 0) {
           rate = foundTask.hourlyRate;
@@ -1335,6 +1337,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (foundClient) {
         pName = `${foundClient.fullName} — Hourly Work`;
         cName = foundClient.fullName;
+        rateCurrency = foundClient.preferredCurrency || rateCurrency;
         if (typeof foundClient.hourlyRate === 'number' && foundClient.hourlyRate > 0) {
           rate = foundClient.hourlyRate;
         }
@@ -1356,8 +1359,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       description: `Working on ${pName}`,
     });
     setElapsedSeconds(0);
-    addNotification('Timer Started', `Tracking session for ${pName} ($${rate}/hr)`, 'info');
-  }, [tasks, clients, settings.defaultHourlyRate, addNotification]);
+    const rateSym = CURRENCY_SYMBOLS[rateCurrency] || rateCurrency;
+    addNotification('Timer Started', `Tracking session for ${pName} (${rateSym} ${rate}/hr)`, 'info');
+  }, [tasks, clients, settings.defaultHourlyRate, settings.defaultCurrency, addNotification]);
 
   const pauseTimer = useCallback(() => {
     if (!activeTimer.isRunning || activeTimer.isPaused || !activeTimer.lastResumedTime) return;
@@ -2657,7 +2661,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     markLocalEdit();
     const now = new Date().toISOString();
     setTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, ...updates, updatedAt: now } : t))
+      prev.map((t) => {
+        if (t.id !== id) return t;
+        const nextTask: Task = { ...t, ...updates, updatedAt: now };
+        if (updates.status === 'completed' && !nextTask.completedAt) {
+          nextTask.completedAt = now;
+        }
+        return nextTask;
+      })
     );
   }, [markLocalEdit]);
 

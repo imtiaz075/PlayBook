@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { PlatformType, Priority } from '../../types';
+import { formatCurrency, convertCurrency, CURRENCY_SYMBOLS } from '../../services/currency';
 
 export const QuickAddModal: React.FC = () => {
   const {
@@ -23,7 +24,12 @@ export const QuickAddModal: React.FC = () => {
     addGoal,
     budgetCategories,
     settings,
+    displayCurrency,
+    ratesData,
   } = useApp();
+
+  const activeCurrency = displayCurrency || settings.defaultCurrency || 'USD';
+  const activeCurrencySymbol = CURRENCY_SYMBOLS[activeCurrency] || activeCurrency;
 
   const [activeTab, setActiveTab] = useState<'task' | 'schedule' | 'expense' | 'contact' | 'goal'>('task');
 
@@ -115,7 +121,7 @@ export const QuickAddModal: React.FC = () => {
     addExpense({
       title: expTitle.trim(),
       amount: Number(expAmount),
-      currency: 'USD',
+      currency: displayCurrency || 'USD',
       date: expDate,
       category: cat?.name || 'General Expense',
       paymentMethod: 'Credit Card',
@@ -134,7 +140,7 @@ export const QuickAddModal: React.FC = () => {
       companyName: contactCompany.trim(),
       clientSource: contactSource,
       country: 'United States',
-      preferredCurrency: 'USD',
+      preferredCurrency: activeCurrency,
       pricingType: 'hourly',
       hourlyRate: Number(contactRate) || 60,
       status: 'active',
@@ -419,7 +425,9 @@ export const QuickAddModal: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Amount ($ USD) *</label>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    Amount ({CURRENCY_SYMBOLS[displayCurrency] || displayCurrency} {displayCurrency}) *
+                  </label>
                   <input
                     type="number"
                     min="0.5"
@@ -449,11 +457,19 @@ export const QuickAddModal: React.FC = () => {
                   onChange={(e) => setExpCatId(e.target.value)}
                   className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 >
-                  {budgetCategories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} (Limit: ${c.monthlyLimit})
-                    </option>
-                  ))}
+                  {budgetCategories.map((c) => {
+                    const convertedLimit = convertCurrency(
+                      c.monthlyLimit || 0,
+                      c.currency || 'USD',
+                      activeCurrency,
+                      ratesData.rates
+                    );
+                    return (
+                      <option key={c.id} value={c.id}>
+                        {c.name} (Limit: {formatCurrency(convertedLimit, activeCurrency)})
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
@@ -524,7 +540,9 @@ export const QuickAddModal: React.FC = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Hourly Rate ($)</label>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    Hourly Rate ({activeCurrencySymbol})
+                  </label>
                   <input
                     type="number"
                     value={contactRate}
@@ -552,7 +570,7 @@ export const QuickAddModal: React.FC = () => {
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Reach $7,000 USD Monthly Baseline"
+                  placeholder={`e.g. Reach ${formatCurrency(7000, activeCurrency)} Monthly Baseline`}
                   value={goalName}
                   onChange={(e) => setGoalName(e.target.value)}
                   className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
@@ -561,7 +579,9 @@ export const QuickAddModal: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Target Value ($ USD) *</label>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    Target Value ({activeCurrencySymbol} {activeCurrency}) *
+                  </label>
                   <input
                     type="number"
                     required
