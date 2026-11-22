@@ -1,7 +1,7 @@
 import React from 'react';
 import { CheckCircle2, Clock, DollarSign, FileText, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { formatCurrency } from '../../services/currency';
+import { formatCurrency, CURRENCY_SYMBOLS } from '../../services/currency';
 
 interface TimerSummaryModalProps {
   onOpenCreateInvoiceWithData: (data: {
@@ -18,13 +18,18 @@ interface TimerSummaryModalProps {
 export const TimerSummaryModal: React.FC<TimerSummaryModalProps> = ({
   onOpenCreateInvoiceWithData,
 }) => {
-  const { completedSessionSummary, dismissCompletedSessionSummary, displayCurrency, ratesData } =
+  const { completedSessionSummary, dismissCompletedSessionSummary, tasks, clients, settings } =
     useApp();
 
   if (!completedSessionSummary || !completedSessionSummary.visible) return null;
 
-  const { durationSeconds, billableValue, projectName, clientName, projectId, clientId, hourlyRate } =
+  const { durationSeconds, billableValue, projectName, clientName, projectId, clientId, hourlyRate, currency } =
     completedSessionSummary;
+
+  const summaryTask = projectId ? tasks.find((t) => t.id === projectId) : undefined;
+  const summaryClient = clientId ? clients.find((c) => c.id === clientId) : undefined;
+  const summaryCurrency = currency || summaryTask?.currency || summaryClient?.preferredCurrency || settings.defaultCurrency || 'USD';
+  const summarySymbol = CURRENCY_SYMBOLS[summaryCurrency] || summaryCurrency;
 
   const hours = (durationSeconds / 3600).toFixed(2);
   const formattedDuration = `${Math.floor(durationSeconds / 3600)}h ${Math.floor(
@@ -84,9 +89,9 @@ export const TimerSummaryModal: React.FC<TimerSummaryModalProps> = ({
                 <span>Billable Value</span>
               </div>
               <p className="text-base font-bold text-emerald-700 font-mono tabular-nums">
-                {formatCurrency(billableValue, 'USD')}
+                {formatCurrency(billableValue, summaryCurrency)}
               </p>
-              <p className="text-[11px] text-emerald-600 mt-0.5">@ ${hourlyRate}/hr</p>
+              <p className="text-[11px] text-emerald-600 mt-0.5">@ {summarySymbol} {hourlyRate}/hr</p>
             </div>
           </div>
 

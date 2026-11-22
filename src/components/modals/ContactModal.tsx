@@ -74,6 +74,14 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose, edi
     e.preventDefault();
     if (!fullName.trim()) return;
 
+    const parsedHourly = Number(hourlyRate);
+    const resolvedClientHourlyRate =
+      pricingType === 'hourly'
+        ? (parsedHourly > 0 ? parsedHourly : 50)
+        : (editingClient?.hourlyRate && Number(editingClient.hourlyRate) > 0
+            ? Number(editingClient.hourlyRate)
+            : undefined);
+
     if (editingClient) {
       updateClient(editingClient.id, {
         fullName: fullName.trim(),
@@ -86,7 +94,7 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose, edi
         country,
         preferredCurrency,
         pricingType,
-        hourlyRate: pricingType === 'hourly' ? Number(hourlyRate) || 50 : undefined,
+        hourlyRate: resolvedClientHourlyRate,
         fixedAgreedAmount: pricingType === 'fixed' ? Number(fixedAgreedAmount) || 0 : undefined,
         agreedPaymentTerms: agreedPaymentTerms.trim() || undefined,
         totalDealValue: Number(totalDealValue) || undefined,
@@ -105,7 +113,7 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose, edi
         country,
         preferredCurrency,
         pricingType,
-        hourlyRate: pricingType === 'hourly' ? Number(hourlyRate) || 50 : undefined,
+        hourlyRate: resolvedClientHourlyRate,
         fixedAgreedAmount: pricingType === 'fixed' ? Number(fixedAgreedAmount) || 0 : undefined,
         agreedPaymentTerms: agreedPaymentTerms.trim() || undefined,
         totalDealValue: Number(totalDealValue) || undefined,

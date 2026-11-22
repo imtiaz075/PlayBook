@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   X,
   Save,
@@ -47,6 +47,13 @@ export const SettingsModal: React.FC = () => {
   const [browserPermStatus, setBrowserPermStatus] = useState<string>(
     typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
   );
+
+  useEffect(() => {
+    if (settingsOpen) {
+      setFormData({ ...settings });
+      setCustomRates({ ...ratesData.rates });
+    }
+  }, [settingsOpen, settings, ratesData.rates]);
 
   if (!settingsOpen) return null;
 

@@ -110,6 +110,7 @@ export interface TimeEntry {
   endTime: string; // ISO or HH:mm
   durationSeconds: number;
   hourlyRate: number;
+  currency?: string;
   isBillable: boolean;
   billableAmount: number;
   description: string;
@@ -319,6 +320,7 @@ export interface ActiveTimer {
   projectName: string;
   clientName: string;
   hourlyRate: number;
+  currency?: string;
   description: string;
 }
 

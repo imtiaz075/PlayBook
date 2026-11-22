@@ -248,16 +248,17 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                   if (!taskToEdit) {
                     const nextClient = clients.find((c) => c.id === nextId);
                     if (nextClient) {
-                      if (nextClient.hourlyRate) {
-                        setHourlyRate(String(nextClient.hourlyRate));
-                      }
+                      const nextRate = nextClient.hourlyRate && nextClient.hourlyRate > 0
+                        ? nextClient.hourlyRate
+                        : (settings.defaultHourlyRate || 50);
+                      setHourlyRate(String(nextRate));
                       if (nextClient.preferredCurrency) {
                         setCurrency(nextClient.preferredCurrency);
                       }
                       if (nextClient.pricingType === 'hourly') {
                         setPriceType('hourly');
                         const hrs = Number(estimatedHours) || 10;
-                        setProjectPrice(String((nextClient.hourlyRate || 50) * hrs));
+                        setProjectPrice(String(nextRate * hrs));
                       } else if (nextClient.pricingType === 'fixed') {
                         setPriceType('fixed');
                       }
@@ -320,7 +321,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                   setPriceType(nextType);
                   if (nextType === 'hourly') {
                     const cl = clients.find((c) => c.id === clientId);
-                    const rateNum = Number(hourlyRate) > 0 ? Number(hourlyRate) : (cl?.hourlyRate || settings.defaultHourlyRate || 50);
+                    const rateNum =
+                      cl?.hourlyRate && cl.hourlyRate > 0
+                        ? cl.hourlyRate
+                        : Number(hourlyRate) > 0
+                        ? Number(hourlyRate)
+                        : settings.defaultHourlyRate || 50;
                     setHourlyRate(String(rateNum));
                     setProjectPrice(String(rateNum * (Number(estimatedHours) || 10)));
                   }

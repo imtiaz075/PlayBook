@@ -47,6 +47,7 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
   const [dateFilter, setDateFilter] = useState<'today' | 'week' | 'month' | 'all'>('today');
   const [selectedClientId, setSelectedClientId] = useState<string>('');
   const [selectedTaskId, setSelectedTaskId] = useState<string>('');
+  const [rateInput, setRateInput] = useState<string>('');
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
   const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
 
@@ -61,58 +62,87 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
     }
   }, [activeTimer.isRunning, activeTimer.isPaused]);
 
-  const defaultRate = settings.defaultHourlyRate > 0 ? settings.defaultHourlyRate : 50;
+  const defaultRate = Number(settings.defaultHourlyRate) > 0 ? Number(settings.defaultHourlyRate) : 50;
+
+  const findClientMatch = (clientId?: string, clientNameHint?: string) => {
+    if (clientId) {
+      const byId = clients.find((c) => c.id === clientId);
+      if (byId) return byId;
+    }
+    if (clientNameHint) {
+      const norm = clientNameHint.trim().toLowerCase();
+      return clients.find((c) => c.fullName.trim().toLowerCase() === norm);
+    }
+    return undefined;
+  };
 
   const resolveEffectiveHourlyRate = (taskId?: string, clientId?: string): number => {
     if (taskId) {
       const foundTask = tasks.find((t) => t.id === taskId);
       if (foundTask) {
-        const foundClient = clients.find((c) => c.id === (foundTask.clientId || clientId));
-        if (foundTask.priceType === 'hourly' && typeof foundTask.hourlyRate === 'number' && foundTask.hourlyRate > 0) {
-          return foundTask.hourlyRate;
+        const foundClient = findClientMatch(foundTask.clientId || clientId, foundTask.clientName);
+        const taskRate = Number(foundTask.hourlyRate);
+        const clientRate = Number(foundClient?.hourlyRate);
+        if (foundTask.priceType === 'hourly' && taskRate > 0) {
+          return taskRate;
         }
-        if (foundClient && typeof foundClient.hourlyRate === 'number' && foundClient.hourlyRate > 0) {
-          return foundClient.hourlyRate;
+        if (clientRate > 0) {
+          return clientRate;
         }
-        if (typeof foundTask.hourlyRate === 'number' && foundTask.hourlyRate > 0) {
-          return foundTask.hourlyRate;
+        if (taskRate > 0) {
+          return taskRate;
         }
       }
     }
     if (clientId) {
-      const foundClient = clients.find((c) => c.id === clientId);
-      if (foundClient && typeof foundClient.hourlyRate === 'number' && foundClient.hourlyRate > 0) {
-        return foundClient.hourlyRate;
+      const foundClient = findClientMatch(clientId);
+      const clientRate = Number(foundClient?.hourlyRate);
+      if (clientRate > 0) {
+        return clientRate;
       }
     }
     return defaultRate;
   };
 
-  const resolveEntryCurrency = (taskId?: string, clientId?: string): string => {
+  const resolveEntryCurrency = (taskId?: string, clientId?: string, explicitCurrency?: string): string => {
+    if (explicitCurrency) return explicitCurrency;
     if (taskId) {
       const foundTask = tasks.find((t) => t.id === taskId);
       if (foundTask?.currency) return foundTask.currency;
-      const foundClient = clients.find((c) => c.id === (foundTask?.clientId || clientId));
+      const foundClient = findClientMatch(foundTask?.clientId || clientId, foundTask?.clientName);
       if (foundClient?.preferredCurrency) return foundClient.preferredCurrency;
     }
     if (clientId) {
-      const foundClient = clients.find((c) => c.id === clientId);
+      const foundClient = findClientMatch(clientId);
       if (foundClient?.preferredCurrency) return foundClient.preferredCurrency;
     }
     return settings.defaultCurrency || 'USD';
   };
 
-  const selectedTask = tasks.find((t) => t.id === selectedTaskId);
-  const selectedClient = clients.find((c) => c.id === selectedClientId);
-  const previewHourlyRate = resolveEffectiveHourlyRate(
+  const resolvedRateForSelection = resolveEffectiveHourlyRate(
     selectedTaskId || undefined,
     selectedClientId || undefined
   );
+
+  // Auto-sync the visible rate input whenever selected client, task, or underlying rates change
+  useEffect(() => {
+    if (!activeTimer.isRunning) {
+      setRateInput(String(resolvedRateForSelection));
+    }
+  }, [selectedClientId, selectedTaskId, resolvedRateForSelection, activeTimer.isRunning]);
+
+  const selectedTask = tasks.find((t) => t.id === selectedTaskId);
+  const selectedClient = clients.find((c) => c.id === selectedClientId);
+  const parsedRateInput = Number(rateInput);
+  const previewHourlyRate =
+    Number.isFinite(parsedRateInput) && parsedRateInput > 0
+      ? parsedRateInput
+      : resolvedRateForSelection;
   const activeOrPreviewRate = activeTimer.isRunning
-    ? (activeTimer.hourlyRate > 0 ? activeTimer.hourlyRate : defaultRate)
+    ? (Number(activeTimer.hourlyRate) > 0 ? Number(activeTimer.hourlyRate) : defaultRate)
     : previewHourlyRate;
   const activeRateCurrency = activeTimer.isRunning
-    ? resolveEntryCurrency(activeTimer.projectId, activeTimer.clientId)
+    ? resolveEntryCurrency(activeTimer.projectId, activeTimer.clientId, activeTimer.currency)
     : resolveEntryCurrency(selectedTaskId || undefined, selectedClientId || undefined);
   const activeRateSymbol = CURRENCY_SYMBOLS[activeRateCurrency] || activeRateCurrency;
 
@@ -160,7 +190,7 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
   const billableValue = filteredTimeEntries
     .filter((te) => te.isBillable)
     .reduce((sum, te) => {
-      const entryCurr = resolveEntryCurrency(te.projectId, te.clientId);
+      const entryCurr = resolveEntryCurrency(te.projectId, te.clientId, te.currency);
       return sum + convertCurrency(te.billableAmount, entryCurr, displayCurrency, ratesData.rates);
     }, 0);
 
@@ -189,14 +219,20 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
   };
 
   const handleStartProjectTimer = () => {
-    startTimer(selectedTaskId || undefined, selectedClientId || undefined);
+    startTimer(
+      selectedTaskId || undefined,
+      selectedClientId || undefined,
+      previewHourlyRate
+    );
   };
 
   const activeTasksForSelect = tasks.filter(
     (t) =>
       t.status !== 'completed' &&
       t.status !== 'cancelled' &&
-      (!selectedClientId || t.clientId === selectedClientId)
+      (!selectedClientId ||
+        t.clientId === selectedClientId ||
+        (selectedClient && t.clientName.trim().toLowerCase() === selectedClient.fullName.trim().toLowerCase()))
   );
 
   const formatTimerTime = (secs: number) => {
@@ -273,13 +309,21 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
 
             <div className="flex items-center gap-2 w-full sm:w-auto">
               {!activeTimer.isRunning ? (
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+                <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 w-full sm:w-auto">
                   <select
                     value={selectedClientId}
                     onChange={(e) => {
                       const nextClientId = e.target.value;
                       setSelectedClientId(nextClientId);
-                      if (nextClientId && selectedTask && selectedTask.clientId !== nextClientId) {
+                      const nextClient = clients.find((c) => c.id === nextClientId);
+                      if (
+                        nextClientId &&
+                        selectedTask &&
+                        selectedTask.clientId !== nextClientId &&
+                        (!nextClient ||
+                          selectedTask.clientName.trim().toLowerCase() !==
+                            nextClient.fullName.trim().toLowerCase())
+                      ) {
                         setSelectedTaskId('');
                       }
                     }}
@@ -291,7 +335,7 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
                       const cSym = CURRENCY_SYMBOLS[c.preferredCurrency || 'USD'] || c.preferredCurrency || '$';
                       return (
                         <option key={c.id} value={c.id}>
-                          {c.fullName}{c.hourlyRate ? ` (${cSym} ${c.hourlyRate}/hr)` : ''}
+                          {c.fullName}{Number(c.hourlyRate) > 0 ? ` (${cSym} ${c.hourlyRate}/hr)` : ''}
                         </option>
                       );
                     })}
@@ -303,8 +347,13 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
                       setSelectedTaskId(nextTaskId);
                       if (nextTaskId) {
                         const matched = tasks.find((t) => t.id === nextTaskId);
-                        if (matched?.clientId) {
-                          setSelectedClientId(matched.clientId);
+                        if (matched) {
+                          const matchedClient = findClientMatch(matched.clientId, matched.clientName);
+                          if (matchedClient?.id) {
+                            setSelectedClientId(matchedClient.id);
+                          } else if (matched.clientId) {
+                            setSelectedClientId(matched.clientId);
+                          }
                         }
                       }
                     }}
@@ -324,6 +373,24 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
                       );
                     })}
                   </select>
+                  <div
+                    className="flex items-center bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-2 shrink-0"
+                    title="Effective hourly rate for this session (auto-filled from project or client profile)"
+                  >
+                    <span className="text-[11px] font-mono text-indigo-300 mr-1.5 select-none">
+                      {activeRateSymbol}
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={rateInput}
+                      onChange={(e) => setRateInput(e.target.value)}
+                      aria-label="Hourly rate"
+                      className="w-16 bg-transparent text-white text-xs font-mono font-bold focus:outline-none tabular-nums"
+                    />
+                    <span className="text-[10px] text-slate-400 ml-1 select-none">/hr</span>
+                  </div>
                   <button
                     onClick={handleStartProjectTimer}
                     className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl transition-all shadow-md shadow-indigo-600/30 cursor-pointer shrink-0"
@@ -504,7 +571,7 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
               ) : (
                 filteredTimeEntries.map((entry) => {
                   const hrs = (entry.durationSeconds / 3600).toFixed(2);
-                  const entryCurr = resolveEntryCurrency(entry.projectId, entry.clientId);
+                  const entryCurr = resolveEntryCurrency(entry.projectId, entry.clientId, entry.currency);
                   const entrySym = CURRENCY_SYMBOLS[entryCurr] || entryCurr;
                   const convertedBillable = convertCurrency(
                     entry.billableAmount,

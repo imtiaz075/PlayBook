@@ -702,7 +702,7 @@ interface AppContextType {
 
   // Timer State
   activeTimer: ActiveTimer;
-  startTimer: (projectId?: string, clientId?: string) => void;
+  startTimer: (projectId?: string, clientId?: string, overrideRate?: number) => void;
   pauseTimer: () => void;
   resumeTimer: () => void;
   stopTimer: () => void;
@@ -722,6 +722,7 @@ interface AppContextType {
     projectId: string;
     clientId: string;
     hourlyRate: number;
+    currency?: string;
   } | null;
   dismissCompletedSessionSummary: () => void;
 
@@ -1305,43 +1306,66 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     projectId: string;
     clientId: string;
     hourlyRate: number;
+    currency?: string;
   } | null>(null);
 
-  const startTimer = useCallback((projectId?: string, clientId?: string) => {
+  const startTimer = useCallback((projectId?: string, clientId?: string, overrideRate?: number) => {
     let pName = 'General Work Session';
     let cName = 'General Client';
     let resolvedClientId = clientId || '';
-    const defaultRate = settings.defaultHourlyRate > 0 ? settings.defaultHourlyRate : 50;
+    const defaultRate = Number(settings.defaultHourlyRate) > 0 ? Number(settings.defaultHourlyRate) : 50;
     let rate = defaultRate;
     let rateCurrency = settings.defaultCurrency || 'USD';
+
+    const findMatchingClient = (cId?: string, cNameHint?: string) => {
+      if (cId) {
+        const byId = clients.find((c) => c.id === cId);
+        if (byId) return byId;
+      }
+      if (cNameHint) {
+        const normalized = cNameHint.trim().toLowerCase();
+        const byName = clients.find((c) => c.fullName.trim().toLowerCase() === normalized);
+        if (byName) return byName;
+      }
+      return undefined;
+    };
 
     if (projectId) {
       const foundTask = tasks.find((t) => t.id === projectId);
       if (foundTask) {
         pName = foundTask.name;
         cName = foundTask.clientName;
-        resolvedClientId = foundTask.clientId || resolvedClientId;
-        const foundClient = clients.find((c) => c.id === resolvedClientId);
+        const foundClient = findMatchingClient(foundTask.clientId || resolvedClientId, foundTask.clientName);
+        resolvedClientId = foundClient?.id || foundTask.clientId || resolvedClientId;
         rateCurrency = foundTask.currency || foundClient?.preferredCurrency || rateCurrency;
 
-        if (foundTask.priceType === 'hourly' && typeof foundTask.hourlyRate === 'number' && foundTask.hourlyRate > 0) {
-          rate = foundTask.hourlyRate;
-        } else if (foundClient && typeof foundClient.hourlyRate === 'number' && foundClient.hourlyRate > 0) {
-          rate = foundClient.hourlyRate;
-        } else if (typeof foundTask.hourlyRate === 'number' && foundTask.hourlyRate > 0) {
-          rate = foundTask.hourlyRate;
+        const taskRate = Number(foundTask.hourlyRate);
+        const clientRate = Number(foundClient?.hourlyRate);
+
+        if (foundTask.priceType === 'hourly' && taskRate > 0) {
+          rate = taskRate;
+        } else if (clientRate > 0) {
+          rate = clientRate;
+        } else if (taskRate > 0) {
+          rate = taskRate;
         }
       }
     } else if (resolvedClientId) {
-      const foundClient = clients.find((c) => c.id === resolvedClientId);
+      const foundClient = findMatchingClient(resolvedClientId);
       if (foundClient) {
         pName = `${foundClient.fullName} — Hourly Work`;
         cName = foundClient.fullName;
+        resolvedClientId = foundClient.id;
         rateCurrency = foundClient.preferredCurrency || rateCurrency;
-        if (typeof foundClient.hourlyRate === 'number' && foundClient.hourlyRate > 0) {
-          rate = foundClient.hourlyRate;
+        const clientRate = Number(foundClient.hourlyRate);
+        if (clientRate > 0) {
+          rate = clientRate;
         }
       }
+    }
+
+    if (typeof overrideRate === 'number' && Number.isFinite(overrideRate) && overrideRate > 0) {
+      rate = overrideRate;
     }
 
     const now = Date.now();
@@ -1356,6 +1380,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       projectName: pName,
       clientName: cName,
       hourlyRate: rate,
+      currency: rateCurrency,
       description: `Working on ${pName}`,
     });
     setElapsedSeconds(0);
@@ -1398,8 +1423,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       totalSecs = 1;
     }
 
-    const defaultRate = settings.defaultHourlyRate > 0 ? settings.defaultHourlyRate : 50;
-    const rate = activeTimer.hourlyRate > 0 ? activeTimer.hourlyRate : defaultRate;
+    const defaultRate = Number(settings.defaultHourlyRate) > 0 ? Number(settings.defaultHourlyRate) : 50;
+    const rate = Number(activeTimer.hourlyRate) > 0 ? Number(activeTimer.hourlyRate) : defaultRate;
+    const entryTask = activeTimer.projectId ? tasks.find((t) => t.id === activeTimer.projectId) : undefined;
+    const entryClient = activeTimer.clientId ? clients.find((c) => c.id === activeTimer.clientId) : undefined;
+    const entryCurrency = activeTimer.currency || entryTask?.currency || entryClient?.preferredCurrency || settings.defaultCurrency || 'USD';
     const billableVal = Number(((totalSecs / 3600) * rate).toFixed(2));
     const nowISO = new Date().toISOString();
     const todayStr = nowISO.split('T')[0];
@@ -1415,6 +1443,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       endTime: nowISO,
       durationSeconds: totalSecs,
       hourlyRate: rate,
+      currency: entryCurrency,
       isBillable: true,
       billableAmount: billableVal,
       description: activeTimer.description || `Tracked session on ${activeTimer.projectName}`,
@@ -1444,6 +1473,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       projectId: activeTimer.projectId,
       clientId: activeTimer.clientId,
       hourlyRate: rate,
+      currency: entryCurrency,
     });
 
     setActiveTimer({
@@ -1464,7 +1494,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (settings.notificationPreferences.sound) {
       playNotificationChime('complete');
     }
-  }, [activeTimer, settings.defaultHourlyRate, settings.notificationPreferences.sound, markLocalEdit]);
+  }, [activeTimer, tasks, clients, settings.defaultHourlyRate, settings.defaultCurrency, settings.notificationPreferences.sound, markLocalEdit]);
 
   const clearActiveTimer = useCallback(() => {
     const defaultRate = settings.defaultHourlyRate > 0 ? settings.defaultHourlyRate : 50;
@@ -2629,10 +2659,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateClient = useCallback((id: string, updates: Partial<Client>) => {
     markLocalEdit();
     const now = new Date().toISOString();
+    const prevClient = clients.find((c) => c.id === id);
     setClients((prev) =>
       prev.map((c) => (c.id === id ? { ...c, ...updates, updatedAt: now } : c))
     );
-  }, [markLocalEdit]);
+    // Sync client's updated hourly rate to client's hourly tasks that inherited the previous client rate (or lacked one)
+    const nextRate = Number(updates.hourlyRate);
+    if (prevClient && Number.isFinite(nextRate) && nextRate > 0 && nextRate !== prevClient.hourlyRate) {
+      setTasks((prev) =>
+        prev.map((t) => {
+          if (
+            t.clientId === id &&
+            t.priceType === 'hourly' &&
+            (!t.hourlyRate || t.hourlyRate === prevClient.hourlyRate)
+          ) {
+            return { ...t, hourlyRate: nextRate, updatedAt: now };
+          }
+          return t;
+        })
+      );
+    }
+  }, [clients, markLocalEdit]);
 
   const deleteClient = useCallback((id: string) => {
     markLocalEdit(id);
