@@ -39,9 +39,11 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
     stopTimer,
     tasks,
     clients,
+    settings,
   } = useApp();
 
-  const [dateFilter, setDateFilter] = useState<'today' | 'week' | 'month' | 'all'>('month');
+  const [dateFilter, setDateFilter] = useState<'today' | 'week' | 'month' | 'all'>('today');
+  const [selectedClientId, setSelectedClientId] = useState<string>('');
   const [selectedTaskId, setSelectedTaskId] = useState<string>('');
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
   const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
@@ -57,6 +59,43 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
     }
   }, [activeTimer.isRunning, activeTimer.isPaused]);
 
+  const defaultRate = settings.defaultHourlyRate > 0 ? settings.defaultHourlyRate : 50;
+
+  const resolveEffectiveHourlyRate = (taskId?: string, clientId?: string): number => {
+    if (taskId) {
+      const foundTask = tasks.find((t) => t.id === taskId);
+      if (foundTask) {
+        const foundClient = clients.find((c) => c.id === (foundTask.clientId || clientId));
+        if (foundTask.priceType === 'hourly' && typeof foundTask.hourlyRate === 'number' && foundTask.hourlyRate > 0) {
+          return foundTask.hourlyRate;
+        }
+        if (foundClient && typeof foundClient.hourlyRate === 'number' && foundClient.hourlyRate > 0) {
+          return foundClient.hourlyRate;
+        }
+        if (typeof foundTask.hourlyRate === 'number' && foundTask.hourlyRate > 0) {
+          return foundTask.hourlyRate;
+        }
+      }
+    }
+    if (clientId) {
+      const foundClient = clients.find((c) => c.id === clientId);
+      if (foundClient && typeof foundClient.hourlyRate === 'number' && foundClient.hourlyRate > 0) {
+        return foundClient.hourlyRate;
+      }
+    }
+    return defaultRate;
+  };
+
+  const selectedTask = tasks.find((t) => t.id === selectedTaskId);
+  const selectedClient = clients.find((c) => c.id === selectedClientId);
+  const previewHourlyRate = resolveEffectiveHourlyRate(
+    selectedTaskId || undefined,
+    selectedClientId || undefined
+  );
+  const activeOrPreviewRate = activeTimer.isRunning
+    ? (activeTimer.hourlyRate > 0 ? activeTimer.hourlyRate : defaultRate)
+    : previewHourlyRate;
+
   // Compute live elapsed seconds for active timer
   const now = Date.now();
   let liveElapsedSeconds = activeTimer.accumulatedSeconds;
@@ -65,7 +104,7 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
   }
 
   const liveBillableAmount = Number(
-    ((liveElapsedSeconds / 3600) * (activeTimer.hourlyRate || 50)).toFixed(2)
+    ((liveElapsedSeconds / 3600) * activeOrPreviewRate).toFixed(2)
   );
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -121,12 +160,15 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
   };
 
   const handleStartProjectTimer = () => {
-    if (selectedTaskId) {
-      startTimer(selectedTaskId);
-    } else {
-      startTimer();
-    }
+    startTimer(selectedTaskId || undefined, selectedClientId || undefined);
   };
+
+  const activeTasksForSelect = tasks.filter(
+    (t) =>
+      t.status !== 'completed' &&
+      t.status !== 'cancelled' &&
+      (!selectedClientId || t.clientId === selectedClientId)
+  );
 
   const formatTimerTime = (secs: number) => {
     const hrs = Math.floor(secs / 3600);
@@ -170,17 +212,25 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
             <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white">
               {activeTimer.isRunning
                 ? activeTimer.projectName
-                : 'Select Project & Start Billable Timer'}
+                : selectedTask
+                ? selectedTask.name
+                : selectedClient
+                ? `${selectedClient.fullName} — Hourly Work`
+                : 'Select Client or Task to Start Timer'}
             </h2>
             <p className="text-xs text-slate-300 max-w-lg leading-relaxed">
               {activeTimer.isRunning
-                ? `Tracking billable hours for ${activeTimer.clientName} at $${activeTimer.hourlyRate}/hr.`
-                : 'Choose a client project from your task list to start timestamp-accurate billable time tracking.'}
+                ? `Tracking billable hours for ${activeTimer.clientName} at $${activeOrPreviewRate}/hr.`
+                : selectedTask
+                ? `Ready to track "${selectedTask.name}" (${selectedTask.clientName}) at $${previewHourlyRate}/hr.`
+                : selectedClient
+                ? `Ready to track hourly work for ${selectedClient.fullName} at $${previewHourlyRate}/hr.`
+                : `Choose a client or task to start billable time tracking (default rate: $${previewHourlyRate}/hr).`}
             </p>
           </div>
 
           <div className="flex flex-col sm:flex-row items-center gap-4 bg-slate-900/80 p-4 rounded-xl border border-slate-800 backdrop-blur-md">
-            <div className="text-center sm:text-left">
+            <div className="text-center sm:text-left shrink-0">
               <span className="text-[11px] text-slate-400 block uppercase font-mono">
                 {activeTimer.isRunning ? (activeTimer.isPaused ? 'Timer Paused' : 'Live Elapsed Time') : 'Ready to Start'}
               </span>
@@ -188,30 +238,62 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
                 {formatTimerTime(liveElapsedSeconds)}
               </span>
               <span className="text-[11px] text-emerald-400 font-mono block mt-0.5">
-                Est. Value: {formatCurrency(liveBillableAmount, 'USD')} (${activeTimer.hourlyRate || 50}/hr)
+                Est. Value: {formatCurrency(liveBillableAmount, 'USD')} (${activeOrPreviewRate}/hr)
               </span>
             </div>
 
             <div className="flex items-center gap-2 w-full sm:w-auto">
               {!activeTimer.isRunning ? (
-                <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+                  <select
+                    value={selectedClientId}
+                    onChange={(e) => {
+                      const nextClientId = e.target.value;
+                      setSelectedClientId(nextClientId);
+                      if (nextClientId && selectedTask && selectedTask.clientId !== nextClientId) {
+                        setSelectedTaskId('');
+                      }
+                    }}
+                    aria-label="Select client"
+                    className="bg-slate-800 text-white text-xs rounded-xl px-3 py-2.5 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:max-w-[180px] truncate cursor-pointer"
+                  >
+                    <option value="">All Clients / General</option>
+                    {clients.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.fullName}{c.hourlyRate ? ` ($${c.hourlyRate}/hr)` : ''}
+                      </option>
+                    ))}
+                  </select>
                   <select
                     value={selectedTaskId}
-                    onChange={(e) => setSelectedTaskId(e.target.value)}
-                    className="bg-slate-800 text-white text-xs rounded-xl px-3 py-2.5 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 max-w-[200px] truncate cursor-pointer"
+                    onChange={(e) => {
+                      const nextTaskId = e.target.value;
+                      setSelectedTaskId(nextTaskId);
+                      if (nextTaskId) {
+                        const matched = tasks.find((t) => t.id === nextTaskId);
+                        if (matched?.clientId) {
+                          setSelectedClientId(matched.clientId);
+                        }
+                      }
+                    }}
+                    aria-label="Select task"
+                    className="bg-slate-800 text-white text-xs rounded-xl px-3 py-2.5 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:max-w-[200px] truncate cursor-pointer"
                   >
-                    <option value="">General Work Session</option>
-                    {tasks
-                      .filter((t) => t.status !== 'completed' && t.status !== 'cancelled')
-                      .map((task) => (
+                    <option value="">
+                      {selectedClient ? `${selectedClient.fullName} — General Hourly` : 'General Work Session'}
+                    </option>
+                    {activeTasksForSelect.map((task) => {
+                      const effRate = resolveEffectiveHourlyRate(task.id, task.clientId);
+                      return (
                         <option key={task.id} value={task.id}>
-                          {task.name} ({task.clientName})
+                          {task.name} ({task.clientName} · ${effRate}/hr)
                         </option>
-                      ))}
+                      );
+                    })}
                   </select>
                   <button
                     onClick={handleStartProjectTimer}
-                    className="flex items-center gap-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl transition-all shadow-md shadow-indigo-600/30 cursor-pointer"
+                    className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl transition-all shadow-md shadow-indigo-600/30 cursor-pointer shrink-0"
                   >
                     <Play size={15} fill="currentColor" />
                     <span>Start Timer</span>

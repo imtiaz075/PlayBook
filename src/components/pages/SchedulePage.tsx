@@ -24,7 +24,7 @@ interface SchedulePageProps {
 export const SchedulePage: React.FC<SchedulePageProps> = ({ onOpenNewSchedule }) => {
   const { schedules, addSchedule, updateSchedule, deleteSchedule, toggleScheduleComplete } = useApp();
 
-  const [filterPeriod, setFilterPeriod] = useState<'day' | 'week' | 'month' | 'all'>('week');
+  const [filterPeriod, setFilterPeriod] = useState<'day' | 'week' | 'month' | 'all'>('day');
   const [editingItem, setEditingItem] = useState<ScheduleItem | null>(null);
 
   const todayStr = new Date().toISOString().split('T')[0];

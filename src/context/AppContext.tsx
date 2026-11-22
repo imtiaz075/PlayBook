@@ -1310,21 +1310,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const startTimer = useCallback((projectId?: string, clientId?: string) => {
     let pName = 'General Work Session';
     let cName = 'General Client';
-    let rate = settings.defaultHourlyRate || 50;
+    let resolvedClientId = clientId || '';
+    const defaultRate = settings.defaultHourlyRate > 0 ? settings.defaultHourlyRate : 50;
+    let rate = defaultRate;
 
     if (projectId) {
       const foundTask = tasks.find((t) => t.id === projectId);
       if (foundTask) {
         pName = foundTask.name;
         cName = foundTask.clientName;
-        clientId = foundTask.clientId;
-        rate = foundTask.hourlyRate || rate;
+        resolvedClientId = foundTask.clientId || resolvedClientId;
+        const foundClient = clients.find((c) => c.id === resolvedClientId);
+
+        if (foundTask.priceType === 'hourly' && typeof foundTask.hourlyRate === 'number' && foundTask.hourlyRate > 0) {
+          rate = foundTask.hourlyRate;
+        } else if (foundClient && typeof foundClient.hourlyRate === 'number' && foundClient.hourlyRate > 0) {
+          rate = foundClient.hourlyRate;
+        } else if (typeof foundTask.hourlyRate === 'number' && foundTask.hourlyRate > 0) {
+          rate = foundTask.hourlyRate;
+        }
       }
-    } else if (clientId) {
-      const foundClient = clients.find((c) => c.id === clientId);
+    } else if (resolvedClientId) {
+      const foundClient = clients.find((c) => c.id === resolvedClientId);
       if (foundClient) {
+        pName = `${foundClient.fullName} — Hourly Work`;
         cName = foundClient.fullName;
-        rate = foundClient.hourlyRate || rate;
+        if (typeof foundClient.hourlyRate === 'number' && foundClient.hourlyRate > 0) {
+          rate = foundClient.hourlyRate;
+        }
       }
     }
 
@@ -1336,14 +1349,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       accumulatedSeconds: 0,
       lastResumedTime: now,
       projectId: projectId || '',
-      clientId: clientId || '',
+      clientId: resolvedClientId,
       projectName: pName,
       clientName: cName,
       hourlyRate: rate,
       description: `Working on ${pName}`,
     });
     setElapsedSeconds(0);
-    addNotification('Timer Started', `Tracking session for ${pName}`, 'info');
+    addNotification('Timer Started', `Tracking session for ${pName} ($${rate}/hr)`, 'info');
   }, [tasks, clients, settings.defaultHourlyRate, addNotification]);
 
   const pauseTimer = useCallback(() => {
@@ -1381,7 +1394,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       totalSecs = 1;
     }
 
-    const rate = activeTimer.hourlyRate || 50;
+    const defaultRate = settings.defaultHourlyRate > 0 ? settings.defaultHourlyRate : 50;
+    const rate = activeTimer.hourlyRate > 0 ? activeTimer.hourlyRate : defaultRate;
     const billableVal = Number(((totalSecs / 3600) * rate).toFixed(2));
     const nowISO = new Date().toISOString();
     const todayStr = nowISO.split('T')[0];
@@ -1438,7 +1452,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       clientId: '',
       projectName: '',
       clientName: '',
-      hourlyRate: 50,
+      hourlyRate: defaultRate,
       description: '',
     });
     setElapsedSeconds(0);
@@ -1446,9 +1460,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (settings.notificationPreferences.sound) {
       playNotificationChime('complete');
     }
-  }, [activeTimer, settings.notificationPreferences.sound, markLocalEdit]);
+  }, [activeTimer, settings.defaultHourlyRate, settings.notificationPreferences.sound, markLocalEdit]);
 
   const clearActiveTimer = useCallback(() => {
+    const defaultRate = settings.defaultHourlyRate > 0 ? settings.defaultHourlyRate : 50;
     setActiveTimer({
       isRunning: false,
       isPaused: false,
@@ -1459,11 +1474,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       clientId: '',
       projectName: '',
       clientName: '',
-      hourlyRate: 50,
+      hourlyRate: defaultRate,
       description: '',
     });
     setElapsedSeconds(0);
-  }, []);
+  }, [settings.defaultHourlyRate]);
 
   const dismissCompletedSessionSummary = useCallback(() => {
     setCompletedSessionSummary(null);

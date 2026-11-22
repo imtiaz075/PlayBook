@@ -41,7 +41,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [newClientEmail, setNewClientEmail] = useState('');
 
   React.useEffect(() => {
+    if (!isOpen) return;
     if (taskToEdit) {
+      const taskClient = clients.find((c) => c.id === taskToEdit.clientId);
+      const fallbackRate = taskClient?.hourlyRate || settings.defaultHourlyRate || 50;
       setName(taskToEdit.name || '');
       setClientId(taskToEdit.clientId || (clients[0]?.id || ''));
       setPlatform((taskToEdit.platform as PlatformType) || 'Fiverr');
@@ -51,28 +54,36 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setStatus(taskToEdit.status || 'open');
       setPriceType(taskToEdit.priceType || 'fixed');
       setProjectPrice(String(taskToEdit.projectPrice ?? 100));
-      setCurrency(taskToEdit.currency || 'USDT');
-      setHourlyRate(String(taskToEdit.hourlyRate ?? 50));
+      setCurrency(taskToEdit.currency || taskClient?.preferredCurrency || 'USDT');
+      setHourlyRate(String(taskToEdit.hourlyRate ?? fallbackRate));
       setEstimatedHours(String(taskToEdit.estimatedHours ?? 10));
       setNotes(taskToEdit.notes || '');
       setDeadlineAlertEnabled(taskToEdit.deadlineAlertEnabled ?? true);
     } else {
+      const targetClientId = initialClientId || clients[0]?.id || '';
+      const initClient = clients.find((c) => c.id === targetClientId);
+      const defaultClientRate = initClient?.hourlyRate || settings.defaultHourlyRate || 50;
+      const defaultEstHours = 10;
       setName('');
-      setClientId(initialClientId || clients[0]?.id || '');
-      setPlatform('Fiverr');
+      setClientId(targetClientId);
+      setPlatform((initClient?.clientSource as PlatformType) || 'Fiverr');
       setDeadline(new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0]);
       setStartDate(new Date().toISOString().split('T')[0]);
       setPriority('medium');
       setStatus('open');
-      setPriceType('fixed');
-      setProjectPrice('100');
-      setCurrency('USDT');
-      setHourlyRate('50');
-      setEstimatedHours('10');
+      setPriceType(initClient?.pricingType === 'hourly' ? 'hourly' : 'fixed');
+      setProjectPrice(
+        initClient?.pricingType === 'hourly'
+          ? String(defaultClientRate * defaultEstHours)
+          : String(initClient?.fixedAgreedAmount || 100)
+      );
+      setCurrency(initClient?.preferredCurrency || settings.defaultCurrency || 'USDT');
+      setHourlyRate(String(defaultClientRate));
+      setEstimatedHours(String(defaultEstHours));
       setNotes('');
       setDeadlineAlertEnabled(true);
     }
-  }, [taskToEdit, initialClientId, isOpen, clients]);
+  }, [taskToEdit, initialClientId, isOpen]);
 
   if (!isOpen) return null;
 
@@ -107,6 +118,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     if (!name.trim()) return;
 
     const selectedClient = clients.find((c) => c.id === clientId);
+    const resolvedHourlyRate =
+      priceType === 'hourly'
+        ? (Number(hourlyRate) > 0 ? Number(hourlyRate) : selectedClient?.hourlyRate || undefined)
+        : undefined;
 
     if (taskToEdit) {
       updateTask(taskToEdit.id, {
@@ -121,7 +136,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         priceType,
         projectPrice: priceNum,
         currency,
-        hourlyRate: Number(hourlyRate) || undefined,
+        hourlyRate: resolvedHourlyRate,
         estimatedHours: Number(estimatedHours) || undefined,
         notes: notes.trim(),
         deadlineAlertEnabled,
@@ -140,7 +155,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         priceType,
         projectPrice: priceNum,
         currency,
-        hourlyRate: Number(hourlyRate) || undefined,
+        hourlyRate: resolvedHourlyRate,
         estimatedHours: Number(estimatedHours) || undefined,
         notes: notes.trim(),
         deadlineAlertEnabled,
@@ -226,12 +241,33 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             ) : (
               <select
                 value={clientId}
-                onChange={(e) => setClientId(e.target.value)}
+                onChange={(e) => {
+                  const nextId = e.target.value;
+                  setClientId(nextId);
+                  if (!taskToEdit) {
+                    const nextClient = clients.find((c) => c.id === nextId);
+                    if (nextClient) {
+                      if (nextClient.hourlyRate) {
+                        setHourlyRate(String(nextClient.hourlyRate));
+                      }
+                      if (nextClient.preferredCurrency) {
+                        setCurrency(nextClient.preferredCurrency);
+                      }
+                      if (nextClient.pricingType === 'hourly') {
+                        setPriceType('hourly');
+                        const hrs = Number(estimatedHours) || 10;
+                        setProjectPrice(String((nextClient.hourlyRate || 50) * hrs));
+                      } else if (nextClient.pricingType === 'fixed') {
+                        setPriceType('fixed');
+                      }
+                    }
+                  }
+                }}
                 className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
               >
                 {clients.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.fullName} ({c.companyName || c.clientSource})
+                    {c.fullName} ({c.companyName || c.clientSource}{c.hourlyRate ? ` · $${c.hourlyRate}/h` : ''})
                   </option>
                 ))}
               </select>
@@ -270,12 +306,21 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1">Price Type</label>
               <select
                 value={priceType}
-                onChange={(e) => setPriceType(e.target.value as 'fixed' | 'hourly')}
+                onChange={(e) => {
+                  const nextType = e.target.value as 'fixed' | 'hourly';
+                  setPriceType(nextType);
+                  if (nextType === 'hourly') {
+                    const cl = clients.find((c) => c.id === clientId);
+                    const rateNum = Number(hourlyRate) > 0 ? Number(hourlyRate) : (cl?.hourlyRate || settings.defaultHourlyRate || 50);
+                    setHourlyRate(String(rateNum));
+                    setProjectPrice(String(rateNum * (Number(estimatedHours) || 10)));
+                  }
+                }}
                 className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
               >
                 <option value="fixed">Fixed Price</option>
@@ -313,6 +358,54 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               </select>
             </div>
           </div>
+
+          {priceType === 'hourly' && (
+            <div className="grid grid-cols-2 gap-3 p-3 bg-indigo-50/60 border border-indigo-100 rounded-lg">
+              <div>
+                <label className="block text-xs font-semibold text-indigo-900 mb-1">
+                  Hourly Rate ({currency}/hr) *
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  step="0.5"
+                  required
+                  value={hourlyRate}
+                  onChange={(e) => {
+                    const nextRate = e.target.value;
+                    setHourlyRate(nextRate);
+                    const rateNum = Number(nextRate) || 0;
+                    const hrsNum = Number(estimatedHours) || 0;
+                    if (rateNum > 0 && hrsNum > 0) {
+                      setProjectPrice(String(Math.round(rateNum * hrsNum * 100) / 100));
+                    }
+                  }}
+                  className="w-full text-xs px-3 py-2 border border-indigo-200 rounded-lg bg-white font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-indigo-900 mb-1">
+                  Estimated Hours
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  value={estimatedHours}
+                  onChange={(e) => {
+                    const nextHrs = e.target.value;
+                    setEstimatedHours(nextHrs);
+                    const rateNum = Number(hourlyRate) || 0;
+                    const hrsNum = Number(nextHrs) || 0;
+                    if (rateNum > 0 && hrsNum > 0) {
+                      setProjectPrice(String(Math.round(rateNum * hrsNum * 100) / 100));
+                    }
+                  }}
+                  className="w-full text-xs px-3 py-2 border border-indigo-200 rounded-lg bg-white font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Smart Platform Fee Live Preview Strip */}
           <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-between text-xs">

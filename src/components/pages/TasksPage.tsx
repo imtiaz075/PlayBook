@@ -53,7 +53,7 @@ export const TasksPage: React.FC<TasksPageProps> = ({
     settings,
   } = useApp();
 
-  const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'in_progress' | 'completed' | 'overdue'>('all');
+  const [statusFilter, setStatusFilter] = useState<'in_progress' | 'open' | 'completed' | 'overdue' | 'all'>('in_progress');
   const [platformFilter, setPlatformFilter] = useState<string>('all');
   const [selectedTaskForDetail, setSelectedTaskForDetail] = useState<Task | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -215,11 +215,11 @@ export const TasksPage: React.FC<TasksPageProps> = ({
         {/* Status Tabs */}
         <div className="flex items-center gap-1 overflow-x-auto text-xs font-medium">
           {[
-            { id: 'all', label: 'All Projects' },
             { id: 'in_progress', label: 'In Progress' },
             { id: 'open', label: 'Open' },
             { id: 'completed', label: 'Completed' },
             { id: 'overdue', label: 'Overdue' },
+            { id: 'all', label: 'All Projects' },
           ].map((tab) => (
             <button
               key={tab.id}

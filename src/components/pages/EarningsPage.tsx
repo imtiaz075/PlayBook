@@ -43,11 +43,15 @@ export const EarningsPage: React.FC<EarningsPageProps> = ({
     setCompanyProfileModalOpen,
   } = useApp();
 
-  const [timeframe, setTimeframe] = useState<'this_month' | 'last_month' | 'all'>('this_month');
+  const [timeframe, setTimeframe] = useState<'this_week' | 'this_month' | 'last_month' | 'all'>('this_week');
   const [currencyRefreshing, setCurrencyRefreshing] = useState(false);
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const nowDate = new Date();
+  const todayStr = nowDate.toISOString().split('T')[0];
   const currentMonthPrefix = todayStr.substring(0, 7); // YYYY-MM
+  const weekAgoStr = new Date(nowDate.getTime() - 7 * 86400000).toISOString().split('T')[0];
+  const lastMonthDate = new Date(nowDate.getFullYear(), nowDate.getMonth() - 1, 1);
+  const lastMonthPrefix = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, '0')}`;
 
   // Handle currency refresh
   const handleRefreshRates = async () => {
@@ -56,19 +60,17 @@ export const EarningsPage: React.FC<EarningsPageProps> = ({
     setTimeout(() => setCurrencyRefreshing(false), 500);
   };
 
+  const matchesTimeframe = (dateStr: string) => {
+    if (timeframe === 'this_week') return dateStr >= weekAgoStr;
+    if (timeframe === 'this_month') return dateStr.startsWith(currentMonthPrefix);
+    if (timeframe === 'last_month') return dateStr.startsWith(lastMonthPrefix);
+    return true;
+  };
+
   // Filter payments by timeframe
   const filteredPayments = useMemo(() => {
-    return payments.filter((p) => {
-      if (timeframe === 'this_month') return p.date.startsWith(currentMonthPrefix);
-      if (timeframe === 'last_month') {
-        const d = new Date();
-        d.setMonth(d.getMonth() - 1);
-        const lastMonthPrefix = d.toISOString().substring(0, 7);
-        return p.date.startsWith(lastMonthPrefix);
-      }
-      return true;
-    });
-  }, [payments, timeframe, currentMonthPrefix]);
+    return payments.filter((p) => matchesTimeframe(p.date));
+  }, [payments, timeframe, weekAgoStr, currentMonthPrefix, lastMonthPrefix]);
 
   // Financial Calculations
   const paymentsReceived = filteredPayments.reduce(
@@ -78,7 +80,7 @@ export const EarningsPage: React.FC<EarningsPageProps> = ({
 
   // Invoiced Revenue for current period
   const invoicedRevenue = invoices
-    .filter((inv) => (timeframe === 'this_month' ? inv.issueDate.startsWith(currentMonthPrefix) : true))
+    .filter((inv) => matchesTimeframe(inv.issueDate))
     .reduce(
       (sum, inv) => sum + convertCurrency(inv.total, inv.currency, displayCurrency, ratesData.rates),
       0
@@ -242,37 +244,25 @@ export const EarningsPage: React.FC<EarningsPageProps> = ({
           </span>
         </div>
 
-        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
-          <button
-            onClick={() => setTimeframe('this_month')}
-            className={`px-3 py-1 font-medium rounded-md transition-colors ${
-              timeframe === 'this_month'
-                ? 'bg-white text-slate-900 shadow-xs font-semibold'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            This Month
-          </button>
-          <button
-            onClick={() => setTimeframe('last_month')}
-            className={`px-3 py-1 font-medium rounded-md transition-colors ${
-              timeframe === 'last_month'
-                ? 'bg-white text-slate-900 shadow-xs font-semibold'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Last Month
-          </button>
-          <button
-            onClick={() => setTimeframe('all')}
-            className={`px-3 py-1 font-medium rounded-md transition-colors ${
-              timeframe === 'all'
-                ? 'bg-white text-slate-900 shadow-xs font-semibold'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            All Time
-          </button>
+        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs overflow-x-auto">
+          {[
+            { id: 'this_week', label: 'This Week' },
+            { id: 'this_month', label: 'This Month' },
+            { id: 'last_month', label: 'Last Month' },
+            { id: 'all', label: 'All Time' },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setTimeframe(tab.id as typeof timeframe)}
+              className={`px-3 py-1 font-medium rounded-md whitespace-nowrap transition-colors ${
+                timeframe === tab.id
+                  ? 'bg-white text-slate-900 shadow-xs font-semibold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
       </div>
 

@@ -37,12 +37,15 @@ export const ManualTimeModal: React.FC<ManualTimeModalProps> = ({
       setIsBillable(editingTimeEntry.isBillable);
       setDescription(editingTimeEntry.description || '');
     } else {
-      setClientId(clients[0]?.id || '');
+      const initClient = clients[0];
+      setClientId(initClient?.id || '');
       setProjectId('');
       setDate(new Date().toISOString().split('T')[0]);
       setHours('2');
       setMinutes('0');
-      setHourlyRate(settings.defaultHourlyRate?.toString() || '65');
+      setHourlyRate(
+        String(initClient?.hourlyRate || settings.defaultHourlyRate || 65)
+      );
       setIsBillable(true);
       setDescription('');
     }
@@ -139,7 +142,16 @@ export const ManualTimeModal: React.FC<ManualTimeModalProps> = ({
             <label className="block text-xs font-bold text-slate-700 mb-1">Associated Project / Task</label>
             <select
               value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
+              onChange={(e) => {
+                const nextTaskId = e.target.value;
+                setProjectId(nextTaskId);
+                const t = tasks.find((item) => item.id === nextTaskId);
+                if (t?.priceType === 'hourly' && t.hourlyRate && t.hourlyRate > 0) {
+                  setHourlyRate(String(t.hourlyRate));
+                } else if (selectedClient?.hourlyRate && selectedClient.hourlyRate > 0) {
+                  setHourlyRate(String(selectedClient.hourlyRate));
+                }
+              }}
               className="w-full text-xs px-3 py-2 border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
             >
               <option value="">General Consulting Work</option>
