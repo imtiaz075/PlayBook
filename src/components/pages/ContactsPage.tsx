@@ -15,6 +15,7 @@ import {
   Edit,
   Archive,
   CheckCircle2,
+  AlertTriangle,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Client, ClientStatus } from '../../types';
@@ -39,6 +40,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
 
   // Client filtering
   const filteredClients = clients.filter((c) => {
@@ -332,10 +334,17 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                           status: client.status === 'active' ? 'closed' : 'active',
                         })
                       }
-                      className="p-1.5 text-slate-400 hover:text-slate-700 rounded-md transition-colors"
+                      className="p-1.5 text-slate-400 hover:text-slate-700 rounded-md transition-colors cursor-pointer"
                       title={client.status === 'active' ? 'Close client (preserves records)' : 'Reactivate client'}
                     >
                       <Archive size={13} />
+                    </button>
+                    <button
+                      onClick={() => setClientToDelete(client)}
+                      className="p-1.5 text-slate-400 hover:text-rose-600 rounded-md transition-colors cursor-pointer"
+                      title="Delete client profile"
+                    >
+                      <Trash2 size={13} />
                     </button>
                   </div>
                 </div>
@@ -352,6 +361,42 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
           onClose={() => setEditingClient(null)}
           editingClient={editingClient}
         />
+      )}
+
+      {/* Confirm Delete Profile Modal */}
+      {clientToDelete && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-sm w-full p-5 space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-2 bg-rose-50 rounded-xl">
+                <AlertTriangle size={20} />
+              </div>
+              <h3 className="text-base font-bold text-slate-900">Delete Client Profile</h3>
+            </div>
+            <p className="text-xs text-slate-600">
+              Are you sure you want to delete <strong className="text-slate-900">{clientToDelete.fullName}</strong>? This action cannot be undone.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setClientToDelete(null)}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 rounded-lg cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  deleteClient(clientToDelete.id);
+                  setClientToDelete(null);
+                }}
+                className="px-3.5 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-lg shadow-xs cursor-pointer"
+              >
+                Delete Profile
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
