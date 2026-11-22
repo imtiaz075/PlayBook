@@ -22,6 +22,7 @@ import {
   CompanyProfile,
   PlanBudget,
   BudgetCategoryAllocation,
+  BudgetIncome,
 } from '../types';
 import { getStoredRates, saveRates, fetchLiveRates, ExchangeRatesData, CURRENCY_SYMBOLS } from '../services/currency';
 import { playNotificationChime } from '../services/audio';
@@ -501,16 +502,20 @@ const SEED_GOALS: Goal[] = [
 ];
 
 const SEED_BUDGET_CATEGORIES: BudgetCategory[] = [
-  { id: 'cat-1', name: 'Software & Subscriptions', monthlyLimit: 300, currency: 'USD', color: '#6366f1', iconName: 'Folder' },
-  { id: 'cat-2', name: 'Business Expenses & Hardware', monthlyLimit: 500, currency: 'USD', color: '#10b981', iconName: 'Laptop' },
-  { id: 'cat-3', name: 'Rent and Housing', monthlyLimit: 1400, currency: 'USD', color: '#f59e0b', iconName: 'Home' },
-  { id: 'cat-4', name: 'Food and Groceries', monthlyLimit: 600, currency: 'USD', color: '#ef4444', iconName: 'ShoppingBag' },
-  { id: 'cat-5', name: 'Internet and Mobile', monthlyLimit: 120, currency: 'USD', color: '#8b5cf6', iconName: 'Wifi' },
-  { id: 'cat-6', name: 'Health & Insurance', monthlyLimit: 250, currency: 'USD', color: '#ec4899', iconName: 'Heart' },
-  { id: 'cat-7', name: 'Education & Courses', monthlyLimit: 150, currency: 'USD', color: '#06b6d4', iconName: 'BookOpen' },
-  { id: 'cat-8', name: 'Taxes Reserve', monthlyLimit: 1000, currency: 'USD', color: '#64748b', iconName: 'DollarSign' },
-  { id: 'cat-9', name: 'Savings Target', monthlyLimit: 1200, currency: 'USD', color: '#14b8a6', iconName: 'PiggyBank' },
-  { id: 'cat-10', name: 'Entertainment', monthlyLimit: 200, currency: 'USD', color: '#f97316', iconName: 'Film' },
+  { id: 'cat-11', name: 'Team & Contractors', budgetType: 'business', monthlyLimit: 1500, currency: 'USD', color: '#4f46e5', iconName: 'Users' },
+  { id: 'cat-12', name: 'Salaries & Payroll', budgetType: 'business', monthlyLimit: 2000, currency: 'USD', color: '#2563eb', iconName: 'Briefcase' },
+  { id: 'cat-13', name: 'Bonuses & Incentives', budgetType: 'business', monthlyLimit: 500, currency: 'USD', color: '#7c3aed', iconName: 'Sparkles' },
+  { id: 'cat-14', name: 'Allowances & Perks', budgetType: 'business', monthlyLimit: 300, currency: 'USD', color: '#0d9488', iconName: 'Gift' },
+  { id: 'cat-1', name: 'Software & Subscriptions', budgetType: 'business', monthlyLimit: 300, currency: 'USD', color: '#6366f1', iconName: 'Folder' },
+  { id: 'cat-2', name: 'Equipment & Hardware', budgetType: 'business', monthlyLimit: 500, currency: 'USD', color: '#10b981', iconName: 'Laptop' },
+  { id: 'cat-8', name: 'Taxes & Legal', budgetType: 'business', monthlyLimit: 1000, currency: 'USD', color: '#64748b', iconName: 'DollarSign' },
+  { id: 'cat-3', name: 'Rent & Housing', budgetType: 'home', monthlyLimit: 1400, currency: 'USD', color: '#f59e0b', iconName: 'Home' },
+  { id: 'cat-4', name: 'Food & Groceries', budgetType: 'home', monthlyLimit: 600, currency: 'USD', color: '#ef4444', iconName: 'ShoppingBag' },
+  { id: 'cat-5', name: 'Home Internet & Cable', budgetType: 'home', monthlyLimit: 120, currency: 'USD', color: '#8b5cf6', iconName: 'Wifi' },
+  { id: 'cat-6', name: 'Health & Medical', budgetType: 'personal', monthlyLimit: 250, currency: 'USD', color: '#ec4899', iconName: 'Heart' },
+  { id: 'cat-7', name: 'Education & Courses', budgetType: 'personal', monthlyLimit: 150, currency: 'USD', color: '#06b6d4', iconName: 'BookOpen' },
+  { id: 'cat-9', name: 'Personal Savings & Investments', budgetType: 'personal', monthlyLimit: 1200, currency: 'USD', color: '#14b8a6', iconName: 'PiggyBank' },
+  { id: 'cat-10', name: 'Entertainment & Leisure', budgetType: 'personal', monthlyLimit: 200, currency: 'USD', color: '#f97316', iconName: 'Film' },
 ];
 
 const SEED_EXPENSES: Expense[] = [
@@ -520,6 +525,7 @@ const SEED_EXPENSES: Expense[] = [
     amount: 25,
     currency: 'USD',
     category: 'Software & Subscriptions',
+    budgetType: 'business',
     date: '2026-10-05',
     paymentMethod: 'Credit Card',
     isRecurring: true,
@@ -689,6 +695,11 @@ interface AppContextType {
   deletePlanBudget: (id: string) => void;
   planBudgetModalOpen: boolean;
   setPlanBudgetModalOpen: (open: boolean) => void;
+
+  budgetIncomes: BudgetIncome[];
+  addBudgetIncome: (incomeData: Omit<BudgetIncome, 'id' | 'createdAt'>) => BudgetIncome;
+  updateBudgetIncome: (id: string, updates: Partial<BudgetIncome>) => void;
+  deleteBudgetIncome: (id: string) => void;
 
   expenseModalOpen: boolean;
   setExpenseModalOpen: (open: boolean) => void;
@@ -944,6 +955,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           'freelanceos_tasks',
           'freelanceos_clients',
           'freelanceos_plan_budgets',
+          'freelanceos_budget_incomes',
           'freelanceos_budget_categories',
           'freelanceos_expenses',
           'freelanceos_subscriptions',
@@ -1051,27 +1063,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const DEFAULT_PLAN_BUDGETS: PlanBudget[] = [
     {
       id: 'pb-1',
-      name: 'Q4 Master Operating Budget',
+      name: 'Q4 Business Operating Budget',
+      budgetType: 'business',
       period: 'quarterly',
       startDate: '2026-10-01',
       endDate: '2026-12-31',
       currency: 'USD',
       totalPlannedBudget: 3500,
       categoryAllocations: [
-        { category: 'Rent and Housing', plannedAmount: 1200 },
-        { category: 'Food and Groceries', plannedAmount: 500 },
-        { category: 'Software and Subscriptions', plannedAmount: 300 },
-        { category: 'Internet and Mobile', plannedAmount: 150 },
-        { category: 'Savings', plannedAmount: 1000 },
+        { category: 'Team & Contractors', plannedAmount: 1200 },
+        { category: 'Salaries & Payroll', plannedAmount: 1000 },
+        { category: 'Bonuses & Incentives', plannedAmount: 300 },
+        { category: 'Allowances & Perks', plannedAmount: 200 },
+        { category: 'Software & Subscriptions', plannedAmount: 450 },
         { category: 'Business Expenses', plannedAmount: 350 },
       ],
-      notes: 'Quarterly planned budget allocations across operating categories.',
+      notes: 'Quarterly business operating budget allocations.',
       createdAt: '2026-10-01T10:00:00.000Z',
     },
   ];
 
   const [planBudgets, setPlanBudgets] = useState<PlanBudget[]>(() =>
     loadStored('plan_budgets', DEFAULT_PLAN_BUDGETS)
+  );
+  const [budgetIncomes, setBudgetIncomes] = useState<BudgetIncome[]>(() =>
+    loadStored('budget_incomes', [])
   );
 
   useEffect(() => {
@@ -1216,6 +1232,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => saveStored('schedules', schedules), [schedules]);
   useEffect(() => saveStored('goals', goals), [goals]);
   useEffect(() => saveStored('budget_categories', budgetCategories), [budgetCategories]);
+  useEffect(() => saveStored('budget_incomes', budgetIncomes), [budgetIncomes]);
   useEffect(() => saveStored('expenses', expenses), [expenses]);
   useEffect(() => saveStored('subscriptions', subscriptions), [subscriptions]);
   useEffect(() => saveStored('settings', settings), [settings]);
@@ -1702,6 +1719,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     clients,
     tasks,
     planBudgets,
+    budgetIncomes,
     budgetCategories,
     timeEntries,
     invoices,
@@ -1719,6 +1737,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     clients,
     tasks,
     planBudgets,
+    budgetIncomes,
     budgetCategories,
     timeEntries,
     invoices,
@@ -1791,6 +1810,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         snapshot.tasks,
         snapshot.clients,
         snapshot.planBudgets,
+        snapshot.budgetIncomes,
         snapshot.budgetCategories,
         snapshot.expenses,
         snapshot.subscriptions,
@@ -1815,6 +1835,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const mergedTasks = mergeCollections(cloudData.tasks, snapshot.tasks, mergeOpts);
         const mergedClients = mergeCollections(cloudData.clients, snapshot.clients, mergeOpts);
         const mergedPlanBudgets = mergeCollections(cloudData.planBudgets, snapshot.planBudgets, mergeOpts);
+        const mergedBudgetIncomes = mergeCollections(cloudData.budgetIncomes, snapshot.budgetIncomes, mergeOpts);
         const mergedBudgetCategories = mergeCollections(cloudData.budgetCategories, snapshot.budgetCategories, mergeOpts);
         const mergedTimeEntries = mergeCollections(cloudData.timeEntries, snapshot.timeEntries, mergeOpts);
         const mergedInvoices = mergeCollections(cloudData.invoices, snapshot.invoices, mergeOpts);
@@ -1837,6 +1858,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setTasks(mergedTasks);
         setClients(mergedClients);
         setPlanBudgets(mergedPlanBudgets);
+        setBudgetIncomes(mergedBudgetIncomes);
         setBudgetCategories(mergedBudgetCategories);
         setTimeEntries(mergedTimeEntries);
         setInvoices(mergedInvoices);
@@ -1854,17 +1876,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           rawMergedPersonalSessions.length !== mergedPersonalSessions.length ||
           rawMergedPersonalSessions.some((s, idx) => s.status !== mergedPersonalSessions[idx]?.status);
 
-        // Only push back to Firestore if we merged local edits, cleaned orphaned sessions, or cloud lacked planBudgets
+        // Only push back to Firestore if we merged local edits, cleaned orphaned sessions, or cloud lacked planBudgets/budgetIncomes
         const needsBackfill =
           treatLocalAsUserOwned ||
           hadOrphanedSessionsCleaned ||
-          !Array.isArray(cloudData.planBudgets);
+          !Array.isArray(cloudData.planBudgets) ||
+          !Array.isArray(cloudData.budgetIncomes);
 
         if (needsBackfill) {
           await saveUserWorkspace(uid, {
             clients: mergedClients,
             tasks: mergedTasks,
             planBudgets: mergedPlanBudgets,
+            budgetIncomes: mergedBudgetIncomes,
             budgetCategories: mergedBudgetCategories,
             timeEntries: mergedTimeEntries,
             invoices: mergedInvoices,
@@ -1989,6 +2013,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     clients,
     tasks,
     planBudgets,
+    budgetIncomes,
     budgetCategories,
     timeEntries,
     invoices,
@@ -2982,6 +3007,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setExpenses((prev) => prev.filter((e) => e.id !== id));
   }, [markLocalEdit]);
 
+  const addBudgetIncome = useCallback((incomeData: Omit<BudgetIncome, 'id' | 'createdAt'>): BudgetIncome => {
+    markLocalEdit();
+    const now = new Date().toISOString();
+    const newIncome: BudgetIncome = {
+      ...incomeData,
+      id: `bi-${Date.now()}`,
+      createdAt: now,
+    };
+    setBudgetIncomes((prev) => [newIncome, ...prev]);
+    addNotification('Income Recorded', `Recorded ${newIncome.amount} ${newIncome.currency} for ${newIncome.title}.`, 'success', 'budget', newIncome.id);
+    return newIncome;
+  }, [addNotification, markLocalEdit]);
+
+  const updateBudgetIncome = useCallback((id: string, updates: Partial<BudgetIncome>) => {
+    markLocalEdit();
+    setBudgetIncomes((prev) => prev.map((inc) => (inc.id === id ? { ...inc, ...updates } : inc)));
+  }, [markLocalEdit]);
+
+  const deleteBudgetIncome = useCallback((id: string) => {
+    markLocalEdit(id);
+    setBudgetIncomes((prev) => prev.filter((inc) => inc.id !== id));
+  }, [markLocalEdit]);
+
   const addBudgetCategory = useCallback((catData: Omit<BudgetCategory, 'id'>): BudgetCategory => {
     markLocalEdit();
     const newCat: BudgetCategory = {
@@ -3062,6 +3110,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       exportedAt: new Date().toISOString(),
       tasks,
       planBudgets,
+      budgetIncomes,
       budgetCategories,
       clients,
       timeEntries,
@@ -3080,6 +3129,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [
     tasks,
     planBudgets,
+    budgetIncomes,
     budgetCategories,
     clients,
     timeEntries,
@@ -3104,6 +3154,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (Array.isArray(data.tasks)) setTasks(data.tasks);
       if (Array.isArray(data.planBudgets)) setPlanBudgets(data.planBudgets);
+      if (Array.isArray(data.budgetIncomes)) setBudgetIncomes(data.budgetIncomes);
       if (Array.isArray(data.budgetCategories)) setBudgetCategories(data.budgetCategories);
       if (Array.isArray(data.clients)) setClients(data.clients);
       if (Array.isArray(data.timeEntries)) setTimeEntries(data.timeEntries);
@@ -3123,6 +3174,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         saveUserWorkspace(currentUser.uid, {
           tasks: data.tasks || tasks,
           planBudgets: data.planBudgets || planBudgets,
+          budgetIncomes: data.budgetIncomes || budgetIncomes,
           budgetCategories: data.budgetCategories || budgetCategories,
           clients: data.clients || clients,
           timeEntries: data.timeEntries || timeEntries,
@@ -3156,6 +3208,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     currentUser?.uid,
     tasks,
     planBudgets,
+    budgetIncomes,
     budgetCategories,
     clients,
     timeEntries,
@@ -3186,6 +3239,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (Array.isArray(data.tasks)) setTasks(data.tasks);
       if (Array.isArray(data.planBudgets)) setPlanBudgets(data.planBudgets);
+      if (Array.isArray(data.budgetIncomes)) setBudgetIncomes(data.budgetIncomes);
       if (Array.isArray(data.budgetCategories)) setBudgetCategories(data.budgetCategories);
       if (Array.isArray(data.clients)) setClients(data.clients);
       if (Array.isArray(data.timeEntries)) setTimeEntries(data.timeEntries);
@@ -3319,6 +3373,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       deletePlanBudget,
       planBudgetModalOpen,
       setPlanBudgetModalOpen,
+      budgetIncomes,
+      addBudgetIncome,
+      updateBudgetIncome,
+      deleteBudgetIncome,
       expenseModalOpen,
       setExpenseModalOpen,
       searchQuery,
@@ -3428,6 +3486,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatePlanBudget,
       deletePlanBudget,
       planBudgetModalOpen,
+      budgetIncomes,
+      addBudgetIncome,
+      updateBudgetIncome,
+      deleteBudgetIncome,
       expenseModalOpen,
       searchQuery,
       exportWorkspaceJSON,

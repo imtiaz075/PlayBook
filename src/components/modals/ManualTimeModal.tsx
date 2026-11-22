@@ -17,7 +17,11 @@ export const ManualTimeModal: React.FC<ManualTimeModalProps> = ({
 }) => {
   const { clients, tasks, addTimeEntry, updateTimeEntry, settings } = useApp();
 
-  const [clientId, setClientId] = useState(clients[0]?.id || '');
+  const activeClients = clients.filter(
+    (c) => c.status !== 'closed' && c.status !== 'archived' || c.id === editingTimeEntry?.clientId
+  );
+
+  const [clientId, setClientId] = useState(activeClients[0]?.id || clients[0]?.id || '');
   const [projectId, setProjectId] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [hours, setHours] = useState('2');
@@ -28,7 +32,7 @@ export const ManualTimeModal: React.FC<ManualTimeModalProps> = ({
 
   useEffect(() => {
     if (editingTimeEntry) {
-      setClientId(editingTimeEntry.clientId || clients[0]?.id || '');
+      setClientId(editingTimeEntry.clientId || activeClients[0]?.id || clients[0]?.id || '');
       setProjectId(editingTimeEntry.projectId || '');
       setDate(editingTimeEntry.date || new Date().toISOString().split('T')[0]);
       const totalMins = Math.floor(editingTimeEntry.durationSeconds / 60);
@@ -38,7 +42,7 @@ export const ManualTimeModal: React.FC<ManualTimeModalProps> = ({
       setIsBillable(editingTimeEntry.isBillable);
       setDescription(editingTimeEntry.description || '');
     } else {
-      const initClient = clients[0];
+      const initClient = activeClients[0] || clients[0];
       setClientId(initClient?.id || '');
       setProjectId('');
       setDate(new Date().toISOString().split('T')[0]);
@@ -54,7 +58,7 @@ export const ManualTimeModal: React.FC<ManualTimeModalProps> = ({
 
   if (!isOpen) return null;
 
-  const selectedClient = clients.find((c) => c.id === clientId) || clients[0];
+  const selectedClient = clients.find((c) => c.id === clientId) || activeClients[0] || clients[0];
   const clientTasks = tasks.filter((t) => t.clientId === clientId);
   const selectedTask = tasks.find((t) => t.id === projectId);
   const activeCurrency =
@@ -117,7 +121,7 @@ export const ManualTimeModal: React.FC<ManualTimeModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-md transition-colors"
+            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-md transition-colors cursor-pointer"
           >
             <X size={16} />
           </button>
@@ -137,7 +141,7 @@ export const ManualTimeModal: React.FC<ManualTimeModalProps> = ({
               }}
               className="w-full text-xs px-3 py-2 border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none font-medium"
             >
-              {clients.map((c) => (
+              {activeClients.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.fullName} ({c.companyName || c.clientSource})
                 </option>
@@ -250,13 +254,13 @@ export const ManualTimeModal: React.FC<ManualTimeModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow-xs transition-colors"
+              className="flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow-xs transition-colors cursor-pointer"
             >
               <Save size={14} />
               <span>{editingTimeEntry ? 'Save Changes' : 'Save Time Entry'}</span>

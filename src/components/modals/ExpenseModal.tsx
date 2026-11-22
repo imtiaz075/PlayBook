@@ -1,8 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { CreditCard, X, Save, AlertTriangle, Wallet } from 'lucide-react';
-import { Expense, PlanBudget } from '../../types';
+import { Expense, PlanBudget, BudgetType } from '../../types';
 import { formatCurrency, convertCurrency } from '../../services/currency';
 import { useApp } from '../../context/AppContext';
+import {
+  ALL_BUDGET_CATEGORIES,
+  BUDGET_TYPE_OPTIONS,
+  BUSINESS_BUDGET_CATEGORIES,
+  PERSONAL_BUDGET_CATEGORIES,
+  HOME_BUDGET_CATEGORIES,
+  getCategoriesForBudgetType,
+  inferBudgetTypeFromCategory,
+} from '../../services/budgetCategories';
 
 interface ExpenseModalProps {
   isOpen: boolean;
@@ -11,29 +20,11 @@ interface ExpenseModalProps {
   editingExpense?: Expense | null;
   onUpdateExpense?: (id: string, updates: Partial<Expense>) => void;
   budgets?: PlanBudget[];
+  initialBudgetType?: BudgetType;
+  defaultMonth?: string;
 }
 
-export const PREDEFINED_EXPENSE_CATEGORIES = [
-  'Rent and Housing',
-  'Food and Groceries',
-  'Transportation',
-  'Utilities',
-  'Internet and Mobile',
-  'Business Expenses',
-  'Software and Subscriptions',
-  'Equipment and Supplies',
-  'Marketing and Advertising',
-  'Education and Courses',
-  'Health and Medical',
-  'Family and Household',
-  'Savings',
-  'Debt and Loan Payments',
-  'Entertainment',
-  'Taxes',
-  'Travel',
-  'Bank and Transaction Fees',
-  'Other',
-];
+export const PREDEFINED_EXPENSE_CATEGORIES = ALL_BUDGET_CATEGORIES;
 
 export const ExpenseModal: React.FC<ExpenseModalProps> = ({
   isOpen,
@@ -42,17 +33,27 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
   editingExpense,
   onUpdateExpense,
   budgets = [],
+  initialBudgetType = 'business',
+  defaultMonth,
 }) => {
   const { displayCurrency, expenses, ratesData } = useApp();
-  const todayStr = new Date().toISOString().split('T')[0];
 
+  const getDefaultDate = () => {
+    const today = new Date().toISOString().split('T')[0];
+    if (defaultMonth && !today.startsWith(defaultMonth)) {
+      return `${defaultMonth}-01`;
+    }
+    return today;
+  };
+
+  const [budgetType, setBudgetType] = useState<BudgetType>(initialBudgetType);
   const [title, setTitle] = useState(editingExpense?.title || '');
   const [amount, setAmount] = useState<string>(editingExpense ? String(editingExpense.amount) : '');
   const [currency, setCurrency] = useState(editingExpense?.currency || displayCurrency || 'USD');
-  const [category, setCategory] = useState(editingExpense?.category || 'Business Expenses');
+  const [category, setCategory] = useState(editingExpense?.category || getCategoriesForBudgetType(initialBudgetType)[0]);
   const [customCategory, setCustomCategory] = useState('');
   const [isCustom, setIsCustom] = useState(false);
-  const [date, setDate] = useState(editingExpense?.date || todayStr);
+  const [date, setDate] = useState(editingExpense?.date || getDefaultDate());
   const [paymentMethod, setPaymentMethod] = useState(editingExpense?.paymentMethod || 'Credit Card');
   const [budgetId, setBudgetId] = useState(editingExpense?.budgetId || '');
   const [isRecurring, setIsRecurring] = useState(editingExpense?.isRecurring || false);
@@ -65,15 +66,18 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
-    const tStr = new Date().toISOString().split('T')[0];
+    const tStr = getDefaultDate();
     if (editingExpense) {
       const cat = editingExpense.category || 'Business Expenses';
-      const custom = !PREDEFINED_EXPENSE_CATEGORIES.includes(cat);
+      const resolvedType: BudgetType =
+        editingExpense.budgetType || inferBudgetTypeFromCategory(cat);
+      const custom = !ALL_BUDGET_CATEGORIES.includes(cat);
+      setBudgetType(resolvedType);
       setTitle(editingExpense.title || '');
       setAmount(editingExpense.amount !== undefined ? String(editingExpense.amount) : '');
       setCurrency(editingExpense.currency || displayCurrency || 'USD');
       setIsCustom(custom);
-      setCategory(custom ? 'Business Expenses' : cat);
+      setCategory(custom ? getCategoriesForBudgetType(resolvedType)[0] : cat);
       setCustomCategory(custom ? cat : '');
       setDate(editingExpense.date || tStr);
       setPaymentMethod(editingExpense.paymentMethod || 'Credit Card');
@@ -84,11 +88,13 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
       setNotes(editingExpense.notes || '');
       setReceiptAttachment(editingExpense.receiptAttachment || '');
     } else {
+      const resolvedType = initialBudgetType || 'business';
+      setBudgetType(resolvedType);
       setTitle('');
       setAmount('');
       setCurrency(displayCurrency || 'USD');
       setIsCustom(false);
-      setCategory('Business Expenses');
+      setCategory(getCategoriesForBudgetType(resolvedType)[0]);
       setCustomCategory('');
       setDate(tStr);
       setPaymentMethod('Credit Card');
@@ -99,18 +105,49 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
       setNotes('');
       setReceiptAttachment('');
     }
-  }, [editingExpense, isOpen, displayCurrency]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingExpense, isOpen, displayCurrency, initialBudgetType, defaultMonth]);
 
   if (!isOpen) return null;
 
-  // Match explicitly selected budget plan or the monthly budget covering this expense date
+  const handleBudgetTypeChange = (nextType: BudgetType) => {
+    setBudgetType(nextType);
+    const scopedCats = getCategoriesForBudgetType(nextType);
+    if (!isCustom && !scopedCats.includes(category)) {
+      setCategory(scopedCats[0]);
+    }
+    if (budgetId) {
+      const linked = budgets.find((b) => b.id === budgetId);
+      if (linked && (linked.budgetType || 'business') !== nextType) {
+        setBudgetId('');
+      }
+    }
+  };
+
+  const handleCategoryChange = (nextCat: string) => {
+    setCategory(nextCat);
+    if (BUSINESS_BUDGET_CATEGORIES.includes(nextCat)) {
+      setBudgetType('business');
+    } else if (PERSONAL_BUDGET_CATEGORIES.includes(nextCat)) {
+      setBudgetType('personal');
+    } else if (HOME_BUDGET_CATEGORIES.includes(nextCat)) {
+      setBudgetType('home');
+    }
+  };
+
+  // Match explicitly selected budget plan or the monthly budget covering this expense date + scope
   const matchedBudget =
     (budgetId ? budgets.find((b) => b.id === budgetId) : undefined) ||
-    budgets.find((b) => Boolean(b.startDate && b.endDate && date >= b.startDate && date <= b.endDate));
+    budgets.find(
+      (b) =>
+        (b.budgetType || 'business') === budgetType &&
+        Boolean(b.startDate && b.endDate && date >= b.startDate && date <= b.endDate)
+    );
 
   const budgetRemainingPreview = matchedBudget
     ? (() => {
         const planCurr = matchedBudget.currency || 'USD';
+        const planScope: BudgetType = matchedBudget.budgetType || 'business';
         const limitInDisplay = convertCurrency(
           matchedBudget.totalPlannedBudget || 0,
           planCurr,
@@ -121,6 +158,8 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
           .filter((e) => {
             if (editingExpense && e.id === editingExpense.id) return false;
             if (e.budgetId) return e.budgetId === matchedBudget.id;
+            const expScope: BudgetType = e.budgetType || inferBudgetTypeFromCategory(e.category);
+            if (expScope !== planScope) return false;
             return Boolean(
               matchedBudget.startDate &&
                 matchedBudget.endDate &&
@@ -157,41 +196,33 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
     const finalCategory = isCustom ? customCategory.trim() || 'Custom Expense' : category;
     const numericAmount = parseFloat(amount) || 0;
 
+    const payload: Omit<Expense, 'id' | 'createdAt'> = {
+      title: title.trim(),
+      amount: numericAmount,
+      currency,
+      category: finalCategory,
+      budgetType,
+      isCustomCategory: isCustom,
+      date,
+      paymentMethod,
+      budgetId: budgetId || undefined,
+      isRecurring,
+      recurrenceFrequency: isRecurring ? recurrenceFrequency : undefined,
+      nextRenewalDate: isRecurring ? nextRenewalDate : undefined,
+      notes: notes.trim(),
+      receiptAttachment,
+    };
+
     if (editingExpense && onUpdateExpense) {
-      onUpdateExpense(editingExpense.id, {
-        title: title.trim(),
-        amount: numericAmount,
-        currency,
-        category: finalCategory,
-        isCustomCategory: isCustom,
-        date,
-        paymentMethod,
-        budgetId: budgetId || undefined,
-        isRecurring,
-        recurrenceFrequency: isRecurring ? recurrenceFrequency : undefined,
-        nextRenewalDate: isRecurring ? nextRenewalDate : undefined,
-        notes: notes.trim(),
-        receiptAttachment,
-      });
+      onUpdateExpense(editingExpense.id, payload);
     } else {
-      onSaveExpense({
-        title: title.trim(),
-        amount: numericAmount,
-        currency,
-        category: finalCategory,
-        isCustomCategory: isCustom,
-        date,
-        paymentMethod,
-        budgetId: budgetId || undefined,
-        isRecurring,
-        recurrenceFrequency: isRecurring ? recurrenceFrequency : undefined,
-        nextRenewalDate: isRecurring ? nextRenewalDate : undefined,
-        notes: notes.trim(),
-        receiptAttachment,
-      });
+      onSaveExpense(payload);
     }
     onClose();
   };
+
+  const activeScopeCategories = getCategoriesForBudgetType(budgetType);
+  const otherGroups = BUDGET_TYPE_OPTIONS.filter((o) => o.value !== budgetType);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 animate-in fade-in duration-200">
@@ -205,10 +236,11 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
               <h2 className="text-base font-bold text-slate-900">
                 {editingExpense ? 'Edit Expense Record' : 'Add Expense'}
               </h2>
-              <p className="text-xs text-slate-500">Record actual paid business or personal expense</p>
+              <p className="text-xs text-slate-500">Record business, personal, or home expenses</p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
           >
@@ -217,6 +249,27 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {/* Budget Scope Selector */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5">Budget Scope</label>
+            <div className="grid grid-cols-3 gap-2">
+              {BUDGET_TYPE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => handleBudgetTypeChange(opt.value)}
+                  className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                    budgetType === opt.value
+                      ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                      : 'bg-white text-slate-700 border-slate-200 hover:border-rose-300'
+                  }`}
+                >
+                  {opt.shortLabel}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">
               Expense Description <span className="text-rose-500">*</span>
@@ -226,7 +279,13 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Figma Organization License Renewal"
+              placeholder={
+                budgetType === 'business'
+                  ? 'e.g. Monthly Team Payroll, Bonus, or SaaS License'
+                  : budgetType === 'home'
+                  ? 'e.g. Monthly Groceries & Utilities'
+                  : 'e.g. Medical Checkup or Personal Course'
+              }
               className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-rose-500 focus:outline-none"
             />
           </div>
@@ -239,10 +298,11 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
               <input
                 type="number"
                 step="any"
+                min="0"
                 required
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                placeholder="45.00"
+                placeholder={currency === 'PKR' ? 'e.g. 15000' : '45.00'}
                 className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl font-mono focus:ring-2 focus:ring-rose-500 focus:outline-none"
               />
             </div>
@@ -252,7 +312,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
               <select
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
-                className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-rose-500 focus:outline-none"
               >
                 <option value="USD">USD ($)</option>
                 <option value="PKR">PKR (Rs)</option>
@@ -317,7 +377,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
               <button
                 type="button"
                 onClick={() => setIsCustom(!isCustom)}
-                className="text-[11px] text-rose-600 font-semibold hover:underline"
+                className="text-[11px] text-rose-600 font-semibold hover:underline cursor-pointer"
               >
                 {isCustom ? 'Use Predefined Category' : '+ Add Custom Category'}
               </button>
@@ -329,20 +389,41 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
                 required
                 value={customCategory}
                 onChange={(e) => setCustomCategory(e.target.value)}
-                placeholder="e.g. Co-Working Workspace Pass"
+                placeholder="e.g. Festival Bonus or Co-Working Pass"
                 className="w-full px-3 py-2 text-xs border border-rose-300 bg-rose-50/30 rounded-xl focus:ring-2 focus:ring-rose-500 focus:outline-none"
               />
             ) : (
               <select
                 value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                onChange={(e) => handleCategoryChange(e.target.value)}
+                className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-rose-500 focus:outline-none"
               >
-                {PREDEFINED_EXPENSE_CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
+                <optgroup
+                  label={BUDGET_TYPE_OPTIONS.find((o) => o.value === budgetType)?.label || 'Selected Scope'}
+                >
+                  {activeScopeCategories.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </optgroup>
+                {otherGroups.map((group) => {
+                  const cats =
+                    group.value === 'business'
+                      ? BUSINESS_BUDGET_CATEGORIES
+                      : group.value === 'personal'
+                      ? PERSONAL_BUDGET_CATEGORIES
+                      : HOME_BUDGET_CATEGORIES;
+                  return (
+                    <optgroup key={group.value} label={group.label}>
+                      {cats.map((cat) => (
+                        <option key={`${group.value}-${cat}`} value={cat}>
+                          {cat}
+                        </option>
+                      ))}
+                    </optgroup>
+                  );
+                })}
               </select>
             )}
           </div>
@@ -364,7 +445,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
               <select
                 value={paymentMethod}
                 onChange={(e) => setPaymentMethod(e.target.value)}
-                className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-rose-500 focus:outline-none"
               >
                 <option value="Credit Card">Credit Card</option>
                 <option value="Debit Card">Debit Card</option>
@@ -383,13 +464,23 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
               <label className="block text-xs font-bold text-slate-700 mb-1">Related Budget Plan</label>
               <select
                 value={budgetId}
-                onChange={(e) => setBudgetId(e.target.value)}
-                className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                onChange={(e) => {
+                  const nextId = e.target.value;
+                  setBudgetId(nextId);
+                  if (nextId) {
+                    const b = budgets.find((item) => item.id === nextId);
+                    if (b?.budgetType) {
+                      setBudgetType(b.budgetType);
+                    }
+                  }
+                }}
+                className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-rose-500 focus:outline-none"
               >
-                <option value="">None (Standalone Expense)</option>
+                <option value="">Auto-match by month & scope</option>
                 {budgets.map((b) => (
                   <option key={b.id} value={b.id}>
-                    {b.name} ({formatCurrency(b.totalPlannedBudget, b.currency || 'USD')})
+                    [{(b.budgetType || 'business').toUpperCase()}] {b.name} (
+                    {formatCurrency(b.totalPlannedBudget, b.currency || 'USD')})
                   </option>
                 ))}
               </select>

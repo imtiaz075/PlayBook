@@ -235,11 +235,13 @@ export const QuickAddModal: React.FC = () => {
                     onChange={(e) => setTaskClientId(e.target.value)}
                     className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   >
-                    {clients.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.fullName} ({c.companyName || c.clientSource})
-                      </option>
-                    ))}
+                    {clients
+                      .filter((c) => c.status !== 'closed' && c.status !== 'archived' || c.id === taskClientId)
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.fullName} ({c.companyName || c.clientSource})
+                        </option>
+                      ))}
                   </select>
                 </div>
                 <div>

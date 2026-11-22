@@ -331,14 +331,16 @@ export const TimeTrackerPage: React.FC<TimeTrackerPageProps> = ({
                     className="bg-slate-800 text-white text-xs rounded-xl px-3 py-2.5 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:max-w-[180px] truncate cursor-pointer"
                   >
                     <option value="">All Clients / General</option>
-                    {clients.map((c) => {
-                      const cSym = CURRENCY_SYMBOLS[c.preferredCurrency || 'USD'] || c.preferredCurrency || '$';
-                      return (
-                        <option key={c.id} value={c.id}>
-                          {c.fullName}{Number(c.hourlyRate) > 0 ? ` (${cSym} ${c.hourlyRate}/hr)` : ''}
-                        </option>
-                      );
-                    })}
+                    {clients
+                      .filter((c) => c.status !== 'closed' && c.status !== 'archived' || c.id === selectedClientId)
+                      .map((c) => {
+                        const cSym = CURRENCY_SYMBOLS[c.preferredCurrency || 'USD'] || c.preferredCurrency || '$';
+                        return (
+                          <option key={c.id} value={c.id}>
+                            {c.fullName}{Number(c.hourlyRate) > 0 ? ` (${cSym} ${c.hourlyRate}/hr)` : ''}
+                          </option>
+                        );
+                      })}
                   </select>
                   <select
                     value={selectedTaskId}

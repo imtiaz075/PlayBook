@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, CheckSquare, Plus, DollarSign, Percent, AlertCircle } from 'lucide-react';
+import { X, CheckSquare } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Priority, PlatformType, TaskStatus, Task } from '../../types';
 import { CURRENCY_SYMBOLS } from '../../services/currency';
@@ -19,8 +19,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 }) => {
   const { clients, addTask, updateTask, addClient, settings } = useApp();
 
+  const activeClients = clients.filter(
+    (c) => c.status !== 'closed' && c.status !== 'archived' || c.id === taskToEdit?.clientId || c.id === initialClientId
+  );
+
   const [name, setName] = useState('');
-  const [clientId, setClientId] = useState(initialClientId || clients[0]?.id || '');
+  const [clientId, setClientId] = useState(initialClientId || activeClients[0]?.id || clients[0]?.id || '');
   const [platform, setPlatform] = useState<PlatformType>('Fiverr');
   const [deadline, setDeadline] = useState(
     new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0]
@@ -43,11 +47,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
   React.useEffect(() => {
     if (!isOpen) return;
+    const defaultTargetId = initialClientId || activeClients[0]?.id || clients[0]?.id || '';
     if (taskToEdit) {
       const taskClient = clients.find((c) => c.id === taskToEdit.clientId);
       const fallbackRate = taskClient?.hourlyRate || settings.defaultHourlyRate || 50;
       setName(taskToEdit.name || '');
-      setClientId(taskToEdit.clientId || (clients[0]?.id || ''));
+      setClientId(taskToEdit.clientId || defaultTargetId);
       setPlatform((taskToEdit.platform as PlatformType) || 'Fiverr');
       setDeadline(taskToEdit.deadline || new Date().toISOString().split('T')[0]);
       setStartDate(taskToEdit.startDate || new Date().toISOString().split('T')[0]);
@@ -61,12 +66,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setNotes(taskToEdit.notes || '');
       setDeadlineAlertEnabled(taskToEdit.deadlineAlertEnabled ?? true);
     } else {
-      const targetClientId = initialClientId || clients[0]?.id || '';
-      const initClient = clients.find((c) => c.id === targetClientId);
+      const initClient = clients.find((c) => c.id === defaultTargetId);
       const defaultClientRate = initClient?.hourlyRate || settings.defaultHourlyRate || 50;
       const defaultEstHours = 10;
       setName('');
-      setClientId(targetClientId);
+      setClientId(defaultTargetId);
       setPlatform((initClient?.clientSource as PlatformType) || 'Fiverr');
       setDeadline(new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0]);
       setStartDate(new Date().toISOString().split('T')[0]);
@@ -84,7 +88,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setNotes('');
       setDeadlineAlertEnabled(true);
     }
-  }, [taskToEdit, initialClientId, isOpen]);
+  }, [taskToEdit, initialClientId, isOpen, clients, settings]);
 
   if (!isOpen) return null;
 
@@ -127,7 +131,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     if (taskToEdit) {
       updateTask(taskToEdit.id, {
         name: name.trim(),
-        clientId: clientId || clients[0]?.id || 'c-default',
+        clientId: clientId || activeClients[0]?.id || 'c-default',
         clientName: selectedClient?.fullName || 'General Client',
         platform,
         deadline,
@@ -146,7 +150,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     } else {
       addTask({
         name: name.trim(),
-        clientId: clientId || clients[0]?.id || 'c-default',
+        clientId: clientId || activeClients[0]?.id || 'c-default',
         clientName: selectedClient?.fullName || 'General Client',
         platform,
         deadline,
@@ -179,7 +183,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-md transition-colors"
+            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-md transition-colors cursor-pointer"
           >
             <X size={16} />
           </button>
@@ -207,7 +211,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               <button
                 type="button"
                 onClick={() => setShowNewClientForm(!showNewClientForm)}
-                className="text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+                className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
               >
                 {showNewClientForm ? 'Cancel New Client' : '+ Add New Client Here'}
               </button>
@@ -234,7 +238,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 <button
                   type="button"
                   onClick={handleQuickAddClient}
-                  className="px-3 py-1 bg-slate-900 text-white rounded text-xs font-semibold"
+                  className="px-3 py-1 bg-slate-900 text-white rounded text-xs font-semibold cursor-pointer"
                 >
                   Save & Select Client
                 </button>
@@ -267,7 +271,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 }}
                 className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
               >
-                {clients.map((c) => {
+                {activeClients.map((c) => {
                   const sym = CURRENCY_SYMBOLS[c.preferredCurrency || 'USD'] || c.preferredCurrency || '$';
                   return (
                     <option key={c.id} value={c.id}>
@@ -460,7 +464,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                   key={p}
                   type="button"
                   onClick={() => setPriority(p)}
-                  className={`flex-1 py-1.5 text-xs font-semibold capitalize rounded-lg border transition-colors ${
+                  className={`flex-1 py-1.5 text-xs font-medium capitalize rounded-lg border transition-colors cursor-pointer ${
                     priority === p
                       ? 'bg-slate-900 text-white border-slate-900'
                       : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
@@ -490,9 +494,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 id="deadlineAlert"
                 checked={deadlineAlertEnabled}
                 onChange={(e) => setDeadlineAlertEnabled(e.target.checked)}
-                className="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-500"
+                className="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
               />
-              <label htmlFor="deadlineAlert" className="text-xs text-slate-700">
+              <label htmlFor="deadlineAlert" className="text-xs text-slate-700 cursor-pointer">
                 Alert me before deadline
               </label>
             </div>
@@ -501,13 +505,13 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-900"
+                className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-900 cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm"
+                className="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm cursor-pointer"
               >
                 Save Project
               </button>

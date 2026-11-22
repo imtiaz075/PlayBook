@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2, FileText, Download, DollarSign, Percent } from 'lucide-react';
+import { X, Plus, Trash2, FileText, Download } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { InvoiceLineItem, Invoice, InvoiceStatus } from '../../types';
 import { formatCurrency } from '../../services/currency';
@@ -26,10 +26,14 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 }) => {
   const { clients, tasks, addInvoice, settings, companyProfile, setCompanyProfileModalOpen } = useApp();
 
-  const [clientId, setClientId] = useState(prefillData?.clientId || clients[0]?.id || '');
+  const activeClients = clients.filter(
+    (c) => c.status !== 'closed' && c.status !== 'archived' || c.id === prefillData?.clientId
+  );
+
+  const [clientId, setClientId] = useState(prefillData?.clientId || activeClients[0]?.id || clients[0]?.id || '');
   const [projectId, setProjectId] = useState(prefillData?.projectId || '');
   const [currency, setCurrency] = useState(
-    clients.find((c) => c.id === (prefillData?.clientId || clients[0]?.id))?.preferredCurrency ||
+    clients.find((c) => c.id === (prefillData?.clientId || activeClients[0]?.id))?.preferredCurrency ||
       settings.defaultCurrency ||
       'USD'
   );
@@ -169,7 +173,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-md transition-colors"
+            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-md transition-colors cursor-pointer"
           >
             <X size={16} />
           </button>
@@ -223,7 +227,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                 onChange={(e) => setClientId(e.target.value)}
                 className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
               >
-                {clients.map((c) => (
+                {activeClients.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.fullName} ({c.companyName || c.clientSource})
                   </option>
@@ -307,7 +311,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               <button
                 type="button"
                 onClick={addLineItem}
-                className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+                className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
               >
                 <Plus size={13} />
                 <span>Add Item</span>
@@ -353,7 +357,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                     <button
                       type="button"
                       onClick={() => removeLineItem(index)}
-                      className="p-1 text-slate-400 hover:text-rose-600 rounded"
+                      className="p-1 text-slate-400 hover:text-rose-600 rounded cursor-pointer"
                     >
                       <Trash2 size={14} />
                     </button>
@@ -431,13 +435,13 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-900"
+              className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-900 cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm"
+              className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm cursor-pointer"
             >
               <Download size={14} />
               <span>Issue Invoice & Download PDF</span>

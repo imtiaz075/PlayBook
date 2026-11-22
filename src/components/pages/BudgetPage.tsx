@@ -3,14 +3,9 @@ import {
   PieChart,
   Plus,
   Receipt,
-  DollarSign,
   AlertTriangle,
   Repeat,
-  CheckCircle2,
   Trash2,
-  Calendar,
-  CreditCard,
-  TrendingDown,
   TrendingUp,
   X,
   Edit,
@@ -18,7 +13,7 @@ import {
   Search,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { Expense, Subscription, BudgetCategory, PlanBudget } from '../../types';
+import { Expense, PlanBudget } from '../../types';
 import { formatCurrency, convertCurrency, CURRENCY_SYMBOLS } from '../../services/currency';
 import { InfoTooltip } from '../common/Tooltip';
 import { PlanBudgetModal } from '../modals/PlanBudgetModal';
@@ -43,14 +38,13 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
     updateExpense,
     deleteExpense,
     addBudgetCategory,
-    updateBudgetCategory,
     deleteBudgetCategory,
     deleteSubscription,
     displayCurrency,
     ratesData,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'plans' | 'expenses' | 'subscriptions' | 'categories'>('plans');
+  const [activeTab, setActiveTab] = useState<'plans' | 'expenses' | 'categories' | 'subscriptions'>('plans');
   const [selectedMonth, setSelectedMonth] = useState<string>(
     new Date().toISOString().substring(0, 7) // YYYY-MM
   );
@@ -74,7 +68,7 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
   const [deletingBudgetPlanId, setDeletingBudgetPlanId] = useState<string | null>(null);
 
   // Filter expenses by selected month
-  const monthExpenses = expenses.filter((e) => e.date.startsWith(selectedMonth));
+  const monthExpenses = expenses.filter((e) => (e.date || '').startsWith(selectedMonth));
 
   // Filtered expenses list for Expenses tab
   const filteredExpensesList = expenses.filter((e) => {
@@ -157,7 +151,7 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
   })();
 
   const monthIncome = payments
-    .filter((p) => p.date.startsWith(selectedMonth))
+    .filter((p) => (p.date || '').startsWith(selectedMonth))
     .reduce(
       (sum, p) => sum + convertCurrency(p.amount, p.currency, displayCurrency, ratesData.rates),
       0
@@ -222,7 +216,7 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
               setEditingPlanBudget(null);
               setPlanBudgetModalOpen(true);
             }}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-purple-900 bg-purple-100 hover:bg-purple-200 border border-purple-300 rounded-xl transition-colors shadow-2xs"
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-purple-900 bg-purple-100 hover:bg-purple-200 border border-purple-300 rounded-xl transition-colors shadow-2xs cursor-pointer"
           >
             <Wallet size={15} />
             <span>Plan Budget</span>
@@ -233,7 +227,7 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
               setEditingExpense(null);
               setExpenseModalOpen(true);
             }}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-colors shadow-xs"
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-colors shadow-xs cursor-pointer"
           >
             <Plus size={15} />
             <span>Add Expense</span>
@@ -311,7 +305,7 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
         <div className="flex border-b border-slate-200 px-6 gap-6 bg-slate-50/50 overflow-x-auto">
           <button
             onClick={() => setActiveTab('plans')}
-            className={`py-3.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-2 shrink-0 ${
+            className={`py-3.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-2 shrink-0 cursor-pointer ${
               activeTab === 'plans'
                 ? 'border-purple-600 text-purple-600'
                 : 'border-transparent text-slate-500 hover:text-slate-900'
@@ -323,7 +317,7 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
 
           <button
             onClick={() => setActiveTab('expenses')}
-            className={`py-3.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-2 shrink-0 ${
+            className={`py-3.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-2 shrink-0 cursor-pointer ${
               activeTab === 'expenses'
                 ? 'border-indigo-600 text-indigo-600'
                 : 'border-transparent text-slate-500 hover:text-slate-900'
@@ -335,7 +329,7 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
 
           <button
             onClick={() => setActiveTab('categories')}
-            className={`py-3.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-2 shrink-0 ${
+            className={`py-3.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-2 shrink-0 cursor-pointer ${
               activeTab === 'categories'
                 ? 'border-indigo-600 text-indigo-600'
                 : 'border-transparent text-slate-500 hover:text-slate-900'
@@ -347,7 +341,7 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
 
           <button
             onClick={() => setActiveTab('subscriptions')}
-            className={`py-3.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-2 shrink-0 ${
+            className={`py-3.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-2 shrink-0 cursor-pointer ${
               activeTab === 'subscriptions'
                 ? 'border-indigo-600 text-indigo-600'
                 : 'border-transparent text-slate-500 hover:text-slate-900'
@@ -374,7 +368,7 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
                     setEditingPlanBudget(null);
                     setPlanBudgetModalOpen(true);
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-purple-600 hover:bg-purple-500 rounded-lg shadow-xs shrink-0"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-purple-600 hover:bg-purple-500 rounded-lg shadow-xs shrink-0 cursor-pointer"
                 >
                   <Plus size={14} />
                   <span>Set Monthly Limit</span>
@@ -459,14 +453,14 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
                                 setEditingPlanBudget(b);
                                 setPlanBudgetModalOpen(true);
                               }}
-                              className="p-1.5 text-slate-400 hover:text-purple-600 rounded-lg transition-colors"
+                              className="p-1.5 text-slate-400 hover:text-purple-600 rounded-lg transition-colors cursor-pointer"
                               title="Edit Budget Plan"
                             >
                               <Edit size={14} />
                             </button>
                             <button
                               onClick={() => setDeletingBudgetPlanId(b.id)}
-                              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors"
+                              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer"
                               title="Delete Budget Plan"
                             >
                               <Trash2 size={14} />
@@ -639,7 +633,7 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
                       setEditingExpense(null);
                       setExpenseModalOpen(true);
                     }}
-                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow-xs shrink-0"
+                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow-xs shrink-0 cursor-pointer"
                   >
                     <Plus size={14} /> Add Expense
                   </button>
@@ -696,14 +690,14 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
                                 setEditingExpense(exp);
                                 setExpenseModalOpen(true);
                               }}
-                              className="p-1 text-slate-400 hover:text-indigo-600 rounded-md transition-colors"
+                              className="p-1 text-slate-400 hover:text-indigo-600 rounded-md transition-colors cursor-pointer"
                               title="Edit expense"
                             >
                               <Edit size={13} />
                             </button>
                             <button
                               onClick={() => setDeletingExpenseId(exp.id)}
-                              className="p-1 text-slate-400 hover:text-rose-600 rounded-md transition-colors"
+                              className="p-1 text-slate-400 hover:text-rose-600 rounded-md transition-colors cursor-pointer"
                               title="Delete expense"
                             >
                               <Trash2 size={13} />
@@ -728,7 +722,7 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
                 </div>
                 <button
                   onClick={() => setCategoryModalOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-xs"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-xs cursor-pointer"
                 >
                   <Plus size={14} /> New Category Limit
                 </button>
@@ -744,7 +738,7 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
                       <h4 className="text-xs font-bold text-slate-900">{cat.name}</h4>
                       <button
                         onClick={() => deleteBudgetCategory(cat.id)}
-                        className="text-slate-400 hover:text-rose-600 text-xs"
+                        className="text-slate-400 hover:text-rose-600 text-xs cursor-pointer"
                       >
                         <Trash2 size={13} />
                       </button>
@@ -811,7 +805,7 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
                         <td className="py-3 px-4 text-right">
                           <button
                             onClick={() => deleteSubscription(sub.id)}
-                            className="p-1 text-slate-400 hover:text-rose-600 rounded-md transition-colors"
+                            className="p-1 text-slate-400 hover:text-rose-600 rounded-md transition-colors cursor-pointer"
                           >
                             <Trash2 size={13} />
                           </button>
@@ -862,13 +856,13 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 onClick={() => setDeletingExpenseId(null)}
-                className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 rounded-lg"
+                className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 rounded-lg cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmDeleteExpense}
-                className="px-3.5 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-lg shadow-xs"
+                className="px-3.5 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-lg shadow-xs cursor-pointer"
               >
                 Delete Expense
               </button>
@@ -893,13 +887,13 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 onClick={() => setDeletingBudgetPlanId(null)}
-                className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 rounded-lg"
+                className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 rounded-lg cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmDeleteBudgetPlan}
-                className="px-3.5 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-lg shadow-xs"
+                className="px-3.5 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-lg shadow-xs cursor-pointer"
               >
                 Delete Plan
               </button>
@@ -914,7 +908,7 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
           <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-sm w-full p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
               <h3 className="text-sm font-bold text-slate-900">Create Spending Cap Limit</h3>
-              <button onClick={() => setCategoryModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setCategoryModalOpen(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
                 <X size={16} />
               </button>
             </div>
@@ -947,13 +941,13 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
                 <button
                   type="button"
                   onClick={() => setCategoryModalOpen(false)}
-                  className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 rounded-lg"
+                  className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 rounded-lg cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-3.5 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-xs"
+                  className="px-3.5 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-xs cursor-pointer"
                 >
                   Save Limit
                 </button>

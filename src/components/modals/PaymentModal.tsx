@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, DollarSign, Check, Calendar, CreditCard } from 'lucide-react';
+import { X, DollarSign } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Task, Invoice } from '../../types';
 import { formatCurrency } from '../../services/currency';
@@ -19,8 +19,15 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 }) => {
   const { clients, tasks, invoices, addPayment, settings } = useApp();
 
+  const activeClients = clients.filter(
+    (c) =>
+      c.status !== 'closed' && c.status !== 'archived' ||
+      c.id === targetInvoice?.clientId ||
+      c.id === targetTask?.clientId
+  );
+
   const [clientId, setClientId] = useState(
-    targetInvoice?.clientId || targetTask?.clientId || clients[0]?.id || ''
+    targetInvoice?.clientId || targetTask?.clientId || activeClients[0]?.id || clients[0]?.id || ''
   );
   const [projectId, setProjectId] = useState(targetInvoice?.projectId || targetTask?.id || '');
   const [invoiceId, setInvoiceId] = useState(targetInvoice?.id || '');
@@ -85,11 +92,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
           <div className="flex items-center gap-2">
             <DollarSign size={18} className="text-emerald-600" />
-            <h2 className="text-sm font-bold text-slate-900">Record Client Payment</h2>
+            <h2 className="text-base font-bold text-slate-900">Record Client Payment</h2>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-md transition-colors"
+            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-md transition-colors cursor-pointer"
           >
             <X size={16} />
           </button>
@@ -108,7 +115,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               }}
               className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
             >
-              {clients.map((c) => (
+              {activeClients.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.fullName} ({c.companyName || c.clientSource})
                 </option>
@@ -233,13 +240,13 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-900"
+              className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-900 cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm"
+              className="px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm cursor-pointer"
             >
               Confirm Payment Recorded
             </button>

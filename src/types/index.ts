@@ -223,9 +223,12 @@ export interface Goal {
   updatedAt?: string;
 }
 
+export type BudgetType = 'business' | 'personal' | 'home';
+
 export interface BudgetCategory {
   id: string;
   name: string;
+  budgetType?: BudgetType;
   monthlyLimit: number;
   currency: string;
   color: string;
@@ -240,6 +243,7 @@ export interface BudgetCategoryAllocation {
 export interface PlanBudget {
   id: string;
   name: string;
+  budgetType?: BudgetType;
   period: 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom';
   startDate: string;
   endDate: string;
@@ -251,12 +255,26 @@ export interface PlanBudget {
   updatedAt?: string;
 }
 
+export interface BudgetIncome {
+  id: string;
+  title: string;
+  amount: number;
+  currency: string;
+  budgetType: BudgetType;
+  source: string;
+  budgetId?: string;
+  date: string; // YYYY-MM-DD
+  notes?: string;
+  createdAt: string;
+}
+
 export interface Expense {
   id: string;
   title: string;
   amount: number;
   currency: string;
   category: string;
+  budgetType?: BudgetType;
   isCustomCategory?: boolean;
   date: string; // YYYY-MM-DD
   paymentMethod?: string;

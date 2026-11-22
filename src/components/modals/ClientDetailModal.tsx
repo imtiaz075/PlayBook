@@ -3,20 +3,16 @@ import {
   X,
   Mail,
   Phone,
-  Globe,
   MapPin,
   DollarSign,
-  Clock,
-  Briefcase,
   FileText,
-  CreditCard,
   Plus,
   Play,
-  CheckCircle2,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { formatCurrency, convertCurrency } from '../../services/currency';
-import { Task, Invoice } from '../../types';
 
 interface ClientDetailModalProps {
   clientId: string | null;
@@ -33,8 +29,9 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
   onOpenRecordPaymentWithClient,
   onOpenCreateInvoiceWithClient,
 }) => {
-  const { clients, tasks, payments, invoices, timeEntries, startTimer, updateClient, ratesData } = useApp();
+  const { clients, tasks, payments, invoices, timeEntries, startTimer, updateClient, deleteClient, ratesData } = useApp();
   const [activeTab, setActiveTab] = useState<'projects' | 'invoices' | 'payments' | 'time'>('projects');
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   if (!clientId) return null;
   const client = clients.find((c) => c.id === clientId);
@@ -58,6 +55,12 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
   );
   const outstandingBalance = Math.max(0, agreedTotal - totalPaid);
   const totalTrackedSeconds = clientTimeEntries.reduce((sum, te) => sum + te.durationSeconds, 0);
+
+  const handleDeleteProfile = () => {
+    deleteClient(client.id);
+    setConfirmDeleteOpen(false);
+    onClose();
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
@@ -88,7 +91,7 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={() => startTimer(undefined, client.id)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-900 bg-white hover:bg-slate-100 rounded-lg transition-colors shadow-xs"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-900 bg-white hover:bg-slate-100 rounded-lg transition-colors shadow-xs cursor-pointer"
               title="Start Timer for this client"
             >
               <Play size={13} fill="currentColor" className="text-emerald-600" />
@@ -97,7 +100,7 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
 
             <button
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-white rounded-md transition-colors"
+              className="p-1.5 text-slate-400 hover:text-white rounded-md transition-colors cursor-pointer"
             >
               <X size={18} />
             </button>
@@ -108,21 +111,21 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
         <div className="flex flex-wrap items-center gap-2 px-6 py-3 bg-slate-50 border-b border-slate-200 text-xs">
           <button
             onClick={() => onOpenNewTaskWithClient(client.id)}
-            className="flex items-center gap-1 px-3 py-1.5 font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg shadow-2xs"
+            className="flex items-center gap-1 px-3 py-1.5 font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg shadow-2xs cursor-pointer"
           >
             <Plus size={13} className="text-indigo-600" />
             <span>Add Project</span>
           </button>
           <button
             onClick={() => onOpenRecordPaymentWithClient(client.id)}
-            className="flex items-center gap-1 px-3 py-1.5 font-semibold text-emerald-700 bg-white hover:bg-emerald-50 border border-emerald-200 rounded-lg shadow-2xs"
+            className="flex items-center gap-1 px-3 py-1.5 font-semibold text-emerald-700 bg-white hover:bg-emerald-50 border border-emerald-200 rounded-lg shadow-2xs cursor-pointer"
           >
             <DollarSign size={13} className="text-emerald-600" />
             <span>Record Payment</span>
           </button>
           <button
             onClick={() => onOpenCreateInvoiceWithClient(client.id)}
-            className="flex items-center gap-1 px-3 py-1.5 font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg shadow-2xs"
+            className="flex items-center gap-1 px-3 py-1.5 font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg shadow-2xs cursor-pointer"
           >
             <FileText size={13} className="text-indigo-600" />
             <span>Create Invoice</span>
@@ -133,9 +136,17 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
                 status: client.status === 'active' ? 'closed' : 'active',
               })
             }
-            className="ml-auto text-slate-500 hover:text-slate-800"
+            className="text-slate-500 hover:text-slate-800 cursor-pointer"
           >
             {client.status === 'active' ? 'Close Client' : 'Reactivate Client'}
+          </button>
+
+          <button
+            onClick={() => setConfirmDeleteOpen(true)}
+            className="ml-auto flex items-center gap-1 text-xs font-semibold text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-lg border border-rose-200 transition-colors cursor-pointer"
+          >
+            <Trash2 size={13} />
+            <span>Delete Profile</span>
           </button>
         </div>
 
@@ -150,7 +161,7 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
               </h3>
               <div className="flex items-center gap-2 text-slate-600">
                 <Mail size={13} className="text-slate-400 shrink-0" />
-                <span>{client.email}</span>
+                <span>{client.email || 'No email provided'}</span>
               </div>
               {client.phone && (
                 <div className="flex items-center gap-2 text-slate-600 font-mono">
@@ -207,7 +218,7 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
             <div className="flex border-b border-slate-200 gap-6 text-xs font-semibold">
               <button
                 onClick={() => setActiveTab('projects')}
-                className={`py-2.5 border-b-2 transition-colors ${
+                className={`py-2.5 border-b-2 transition-colors cursor-pointer ${
                   activeTab === 'projects'
                     ? 'border-indigo-600 text-indigo-600'
                     : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -217,7 +228,7 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
               </button>
               <button
                 onClick={() => setActiveTab('invoices')}
-                className={`py-2.5 border-b-2 transition-colors ${
+                className={`py-2.5 border-b-2 transition-colors cursor-pointer ${
                   activeTab === 'invoices'
                     ? 'border-indigo-600 text-indigo-600'
                     : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -227,7 +238,7 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
               </button>
               <button
                 onClick={() => setActiveTab('payments')}
-                className={`py-2.5 border-b-2 transition-colors ${
+                className={`py-2.5 border-b-2 transition-colors cursor-pointer ${
                   activeTab === 'payments'
                     ? 'border-indigo-600 text-indigo-600'
                     : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -237,7 +248,7 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
               </button>
               <button
                 onClick={() => setActiveTab('time')}
-                className={`py-2.5 border-b-2 transition-colors ${
+                className={`py-2.5 border-b-2 transition-colors cursor-pointer ${
                   activeTab === 'time'
                     ? 'border-indigo-600 text-indigo-600'
                     : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -370,6 +381,39 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Confirm Delete Profile Modal */}
+        {confirmDeleteOpen && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+            <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-sm w-full p-5 space-y-4">
+              <div className="flex items-center gap-3 text-rose-600">
+                <div className="p-2 bg-rose-50 rounded-xl">
+                  <AlertTriangle size={20} />
+                </div>
+                <h3 className="text-base font-bold text-slate-900">Delete Client Profile</h3>
+              </div>
+              <p className="text-xs text-slate-600">
+                Are you sure you want to delete <strong className="text-slate-900">{client.fullName}</strong>? This action cannot be undone.
+              </p>
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setConfirmDeleteOpen(false)}
+                  className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 rounded-lg cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteProfile}
+                  className="px-3.5 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-lg shadow-xs cursor-pointer"
+                >
+                  Delete Profile
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
