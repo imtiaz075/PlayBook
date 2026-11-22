@@ -30,14 +30,17 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
     notifications,
     setNotificationDrawerOpen,
     setSettingsOpen,
+    retryCloudSync,
   } = useApp();
 
   const {
     currentUser,
+    isLocalMode,
     loginWithGoogle,
     logout,
     isAuthLoading,
     syncStatus,
+    syncError,
     lastSyncedAt,
     setShowLoginModal,
   } = useAuth();
@@ -99,33 +102,55 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
       <div className="flex items-center gap-2.5 shrink-0">
         {/* Cloud Sync Status Indicator */}
         {currentUser && (
-          <div
-            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-slate-50 border border-slate-200 text-slate-600"
-            title={
-              syncStatus === 'syncing'
-                ? 'Syncing changes to cloud...'
-                : syncStatus === 'synced'
-                ? `Saved to database under UID: ${currentUser.uid}. Last synced: ${lastSyncedAt || 'just now'}`
-                : 'Offline or syncing error'
-            }
-          >
-            {syncStatus === 'syncing' ? (
-              <>
-                <RefreshCw size={12} className="animate-spin text-indigo-600 shrink-0" />
-                <span className="text-indigo-600 font-semibold">Syncing</span>
-              </>
-            ) : syncStatus === 'synced' ? (
-              <>
-                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 inline-block animate-pulse" />
-                <span className="text-slate-700 font-medium">Cloud Synced</span>
-              </>
-            ) : (
-              <>
-                <AlertCircle size={12} className="text-amber-500 shrink-0" />
-                <span className="text-amber-700">Sync Warning</span>
-              </>
-            )}
-          </div>
+          isLocalMode ? (
+            <button
+              type="button"
+              onClick={() => setShowLoginModal(true)}
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 transition-colors cursor-pointer"
+              title="Local browser storage only. Sign in with Google to save your data in Cloud Database across updates."
+            >
+              <AlertCircle size={12} className="text-amber-600 shrink-0" />
+              <span>Local Only · Sign in to Sync</span>
+            </button>
+          ) : syncStatus === 'error' ? (
+            <button
+              type="button"
+              onClick={() => retryCloudSync()}
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 transition-colors cursor-pointer"
+              title={syncError ? `Cloud sync failed: ${syncError}. Click to retry.` : 'Cloud sync failed. Click to retry.'}
+            >
+              <AlertCircle size={12} className="text-rose-600 shrink-0" />
+              <span>Sync Failed · Retry</span>
+            </button>
+          ) : (
+            <div
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-slate-50 border border-slate-200 text-slate-600"
+              title={
+                syncStatus === 'syncing'
+                  ? 'Syncing changes to cloud...'
+                  : syncStatus === 'synced'
+                  ? `Saved to database under UID: ${currentUser.uid}. Last synced: ${lastSyncedAt || 'just now'}`
+                  : 'Initializing cloud sync...'
+              }
+            >
+              {syncStatus === 'syncing' ? (
+                <>
+                  <RefreshCw size={12} className="animate-spin text-indigo-600 shrink-0" />
+                  <span className="text-indigo-600 font-semibold">Syncing</span>
+                </>
+              ) : syncStatus === 'synced' ? (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 inline-block animate-pulse" />
+                  <span className="text-slate-700 font-medium">Cloud Synced</span>
+                </>
+              ) : (
+                <>
+                  <Cloud size={12} className="text-slate-400 shrink-0" />
+                  <span className="text-slate-600">Connecting...</span>
+                </>
+              )}
+            </div>
+          )
         )}
 
         {/* Currency Switcher */}

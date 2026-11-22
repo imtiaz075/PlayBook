@@ -29,6 +29,7 @@
         "schedules": { "type": "array" },
         "goals": { "type": "array" },
         "budgetCategories": { "type": "array" },
+        "planBudgets": { "type": "array" },
         "expenses": { "type": "array" },
         "subscriptions": { "type": "array" },
         "companyProfile": { "type": "object" },

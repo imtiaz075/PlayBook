@@ -187,6 +187,34 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 }
 
 /**
+ * Deeply remove `undefined` properties and invalid numbers (`NaN` / `Infinity`)
+ * because Firestore `setDoc` rejects any payload containing `undefined` anywhere.
+ */
+export function sanitizeForFirestore<T>(value: T): T {
+  if (value === null || value === undefined) {
+    return null as unknown as T;
+  }
+  if (typeof value === 'number') {
+    return (Number.isFinite(value) ? value : 0) as unknown as T;
+  }
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => item !== undefined)
+      .map((item) => sanitizeForFirestore(item)) as unknown as T;
+  }
+  if (typeof value === 'object') {
+    const out: Record<string, any> = {};
+    for (const [key, val] of Object.entries(value as Record<string, any>)) {
+      if (val !== undefined) {
+        out[key] = sanitizeForFirestore(val);
+      }
+    }
+    return out as T;
+  }
+  return value;
+}
+
+/**
  * Subscribe to Auth State Changes
  */
 export function subscribeToAuth(callback: (user: FirebaseUser | null) => void) {
@@ -204,15 +232,38 @@ export async function saveUserWorkspace(userId: string, data: Record<string, any
   }
   try {
     const docRef = doc(db, 'users', userId, 'workspace', 'data');
-    await setDoc(
-      docRef,
-      {
-        userId,
-        updatedAt: new Date().toISOString(),
-        ...data,
-      },
-      { merge: true }
-    );
+    let payload: Record<string, any> = sanitizeForFirestore<Record<string, any>>({
+      userId,
+      updatedAt: new Date().toISOString(),
+      ...data,
+    });
+
+    // Guard against Firestore's 1 MiB document size limit due to oversized base64 images
+    const approxBytes = new Blob([JSON.stringify(payload)]).size;
+    if (approxBytes > 950000) {
+      console.warn(`Workspace payload (${approxBytes} bytes) approaches 1MB Firestore limit. Trimming oversized base64 attachments to preserve core data.`);
+      if (payload.companyProfile?.businessLogo && payload.companyProfile.businessLogo.length > 100000) {
+        payload = {
+          ...payload,
+          companyProfile: {
+            ...payload.companyProfile,
+            businessLogo: '',
+          },
+        };
+      }
+      if (Array.isArray(payload.expenses)) {
+        payload = {
+          ...payload,
+          expenses: payload.expenses.map((exp: any) =>
+            exp?.receiptAttachment && exp.receiptAttachment.length > 50000
+              ? { ...exp, receiptAttachment: '' }
+              : exp
+          ),
+        };
+      }
+    }
+
+    await setDoc(docRef, payload, { merge: true });
   } catch (error) {
     console.error(`Failed to save workspace for user ${userId}:`, error);
     handleFirestoreError(error, OperationType.WRITE, `users/${userId}/workspace/data`);

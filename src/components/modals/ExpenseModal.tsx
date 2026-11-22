@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CreditCard, X, Plus, Save } from 'lucide-react';
 import { Expense, PlanBudget } from '../../types';
 
@@ -59,6 +59,44 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
   const [nextRenewalDate, setNextRenewalDate] = useState(editingExpense?.nextRenewalDate || '');
   const [notes, setNotes] = useState(editingExpense?.notes || '');
   const [receiptAttachment, setReceiptAttachment] = useState(editingExpense?.receiptAttachment || '');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const tStr = new Date().toISOString().split('T')[0];
+    if (editingExpense) {
+      const cat = editingExpense.category || 'Business Expenses';
+      const custom = !PREDEFINED_EXPENSE_CATEGORIES.includes(cat);
+      setTitle(editingExpense.title || '');
+      setAmount(editingExpense.amount !== undefined ? String(editingExpense.amount) : '');
+      setCurrency(editingExpense.currency || 'USD');
+      setIsCustom(custom);
+      setCategory(custom ? 'Business Expenses' : cat);
+      setCustomCategory(custom ? cat : '');
+      setDate(editingExpense.date || tStr);
+      setPaymentMethod(editingExpense.paymentMethod || 'Credit Card');
+      setBudgetId(editingExpense.budgetId || '');
+      setIsRecurring(Boolean(editingExpense.isRecurring));
+      setRecurrenceFrequency(editingExpense.recurrenceFrequency || 'monthly');
+      setNextRenewalDate(editingExpense.nextRenewalDate || '');
+      setNotes(editingExpense.notes || '');
+      setReceiptAttachment(editingExpense.receiptAttachment || '');
+    } else {
+      setTitle('');
+      setAmount('');
+      setCurrency('USD');
+      setIsCustom(false);
+      setCategory('Business Expenses');
+      setCustomCategory('');
+      setDate(tStr);
+      setPaymentMethod('Credit Card');
+      setBudgetId('');
+      setIsRecurring(false);
+      setRecurrenceFrequency('monthly');
+      setNextRenewalDate('');
+      setNotes('');
+      setReceiptAttachment('');
+    }
+  }, [editingExpense, isOpen]);
 
   if (!isOpen) return null;
 

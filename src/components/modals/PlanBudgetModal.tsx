@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Wallet, X, Plus, Trash2, Save } from 'lucide-react';
 import { PlanBudget, BudgetCategoryAllocation } from '../../types';
 
@@ -28,6 +28,13 @@ const PREDEFINED_CATEGORIES = [
   'Other',
 ];
 
+const DEFAULT_ALLOCATIONS: BudgetCategoryAllocation[] = [
+  { category: 'Rent & Housing', plannedAmount: 1200 },
+  { category: 'Food & Groceries', plannedAmount: 400 },
+  { category: 'Software & Subscriptions', plannedAmount: 150 },
+  { category: 'Savings', plannedAmount: 500 },
+];
+
 export const PlanBudgetModal: React.FC<PlanBudgetModalProps> = ({
   isOpen,
   onClose,
@@ -35,29 +42,52 @@ export const PlanBudgetModal: React.FC<PlanBudgetModalProps> = ({
   editingBudget,
   onUpdatePlanBudget,
 }) => {
+  const todayStr = new Date().toISOString().split('T')[0];
+  const defaultEndStr = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
+
   const [name, setName] = useState(editingBudget?.name || 'Monthly Operating Budget');
   const [period, setPeriod] = useState<'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom'>(
     editingBudget?.period || 'monthly'
   );
-  const todayStr = new Date().toISOString().split('T')[0];
   const [startDate, setStartDate] = useState(editingBudget?.startDate || todayStr);
-  const [endDate, setEndDate] = useState(
-    editingBudget?.endDate || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]
-  );
+  const [endDate, setEndDate] = useState(editingBudget?.endDate || defaultEndStr);
   const [currency, setCurrency] = useState(editingBudget?.currency || 'USD');
   const [notes, setNotes] = useState(editingBudget?.notes || '');
-
   const [allocations, setAllocations] = useState<BudgetCategoryAllocation[]>(
-    editingBudget?.categoryAllocations || [
-      { category: 'Rent & Housing', plannedAmount: 1200 },
-      { category: 'Food & Groceries', plannedAmount: 400 },
-      { category: 'Software & Subscriptions', plannedAmount: 150 },
-      { category: 'Savings', plannedAmount: 500 },
-    ]
+    editingBudget?.categoryAllocations || DEFAULT_ALLOCATIONS
   );
 
   const [newCatName, setNewCatName] = useState('');
   const [newCatAmount, setNewCatAmount] = useState('');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const tStr = new Date().toISOString().split('T')[0];
+    const eStr = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
+    if (editingBudget) {
+      setName(editingBudget.name || 'Monthly Operating Budget');
+      setPeriod(editingBudget.period || 'monthly');
+      setStartDate(editingBudget.startDate || tStr);
+      setEndDate(editingBudget.endDate || eStr);
+      setCurrency(editingBudget.currency || 'USD');
+      setNotes(editingBudget.notes || '');
+      setAllocations(
+        Array.isArray(editingBudget.categoryAllocations) && editingBudget.categoryAllocations.length > 0
+          ? editingBudget.categoryAllocations
+          : DEFAULT_ALLOCATIONS
+      );
+    } else {
+      setName('Monthly Operating Budget');
+      setPeriod('monthly');
+      setStartDate(tStr);
+      setEndDate(eStr);
+      setCurrency('USD');
+      setNotes('');
+      setAllocations(DEFAULT_ALLOCATIONS);
+    }
+    setNewCatName('');
+    setNewCatAmount('');
+  }, [editingBudget, isOpen]);
 
   if (!isOpen) return null;
 

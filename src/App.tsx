@@ -52,6 +52,7 @@ const MainAppContent: React.FC = () => {
     companyProfileModalOpen,
     setCompanyProfileModalOpen,
     addExpense,
+    planBudgets,
   } = useApp();
 
   // Navigation & responsive states
@@ -285,6 +286,7 @@ const MainAppContent: React.FC = () => {
         isOpen={expenseModalOpen}
         onClose={() => setExpenseModalOpen(false)}
         onSaveExpense={addExpense}
+        budgets={planBudgets}
       />
 
       <SubscriptionModal

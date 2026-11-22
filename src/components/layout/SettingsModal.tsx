@@ -1,5 +1,21 @@
-import React, { useState } from 'react';
-import { X, Save, Volume2, Globe, Percent, Bell, User, Check, RefreshCw } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import {
+  X,
+  Save,
+  Volume2,
+  Globe,
+  Percent,
+  Bell,
+  User,
+  Check,
+  RefreshCw,
+  Database,
+  Download,
+  Upload,
+  ShieldCheck,
+  AlertCircle,
+  Copy,
+} from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { playNotificationChime } from '../../services/audio';
 
@@ -12,9 +28,16 @@ export const SettingsModal: React.FC = () => {
     ratesData,
     updateCustomRates,
     refreshExchangeRates,
+    exportWorkspaceJSON,
+    importWorkspaceJSON,
+    restoreEmergencyBackup,
+    hasEmergencyBackup,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'profile' | 'fees' | 'notifications' | 'rates'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'fees' | 'notifications' | 'rates' | 'backup'>('profile');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [backupNotice, setBackupNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [copiedDomain, setCopiedDomain] = useState(false);
 
   // Form states
   const [formData, setFormData] = useState({ ...settings });
@@ -73,6 +96,7 @@ export const SettingsModal: React.FC = () => {
             { id: 'fees', label: 'Platform Fees', icon: Percent },
             { id: 'notifications', label: 'Alerts & Reminders', icon: Bell },
             { id: 'rates', label: 'Currencies & Rates', icon: Globe },
+            { id: 'backup', label: 'Backup & Recovery', icon: Database },
           ].map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -341,6 +365,202 @@ export const SettingsModal: React.FC = () => {
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'backup' && (
+            <div className="space-y-4">
+              {backupNotice && (
+                <div
+                  className={`p-3 rounded-lg border text-xs flex items-center justify-between ${
+                    backupNotice.type === 'success'
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                      : 'bg-rose-50 border-rose-200 text-rose-800'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    {backupNotice.type === 'success' ? <Check size={14} /> : <AlertCircle size={14} />}
+                    <span>{backupNotice.message}</span>
+                  </div>
+                  <button
+                    onClick={() => setBackupNotice(null)}
+                    className="text-slate-400 hover:text-slate-600 p-1"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              )}
+
+              {/* Export Full Workspace */}
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                      <Download size={14} className="text-indigo-600" />
+                      <span>Export Full Workspace (JSON)</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-500 mt-1 max-w-md leading-relaxed">
+                      Download a complete, offline JSON file containing all your custom tasks, budget plans, client records, invoices, payments, and settings.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      try {
+                        const json = exportWorkspaceJSON();
+                        const blob = new Blob([json], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `playbook-workspace-backup-${new Date().toISOString().split('T')[0]}.json`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                        setBackupNotice({ type: 'success', message: 'Workspace JSON file downloaded successfully.' });
+                      } catch {
+                        setBackupNotice({ type: 'error', message: 'Failed to generate backup JSON.' });
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-xs transition-colors shrink-0"
+                  >
+                    <Download size={13} />
+                    <span>Download JSON</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Import / Transfer Workspace */}
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                      <Upload size={14} className="text-blue-600" />
+                      <span>Import / Restore Workspace</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-500 mt-1 max-w-md leading-relaxed">
+                      Transfer your data between domains (e.g. from preview to Vercel) or restore from an existing JSON backup file.
+                    </p>
+                  </div>
+                  <div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".json"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = (evt) => {
+                          const content = evt.target?.result as string;
+                          if (content) {
+                            const success = importWorkspaceJSON(content);
+                            if (success) {
+                              setBackupNotice({
+                                type: 'success',
+                                message: 'Workspace successfully restored and merged from JSON file.',
+                              });
+                            } else {
+                              setBackupNotice({
+                                type: 'error',
+                                message: 'Invalid JSON file format. Could not restore workspace.',
+                              });
+                            }
+                          }
+                        };
+                        reader.readAsText(file);
+                        e.target.value = '';
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg shadow-xs transition-colors shrink-0"
+                    >
+                      <Upload size={13} />
+                      <span>Select File & Restore</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Emergency Local Pre-Sync Snapshot */}
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                      <ShieldCheck size={14} className="text-emerald-600" />
+                      <span>Emergency Pre-Sync Snapshot</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-500 mt-1 max-w-md leading-relaxed">
+                      {hasEmergencyBackup
+                        ? 'An emergency safety snapshot was cached before the most recent cloud sync in this browser session.'
+                        : 'No pre-sync snapshot currently recorded in this browser session.'}
+                    </p>
+                  </div>
+                  {hasEmergencyBackup && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const ok = restoreEmergencyBackup();
+                        if (ok) {
+                          setBackupNotice({
+                            type: 'success',
+                            message: 'Successfully restored workspace from emergency pre-sync snapshot.',
+                          });
+                        } else {
+                          setBackupNotice({
+                            type: 'error',
+                            message: 'Could not restore emergency snapshot.',
+                          });
+                        }
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition-colors shrink-0"
+                    >
+                      <RefreshCw size={13} />
+                      <span>Restore Snapshot</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Domain Whitelist Notice for Custom Deployments */}
+              <div className="p-4 bg-indigo-50/60 rounded-xl border border-indigo-100 space-y-2">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
+                      <Globe size={14} className="text-indigo-600" />
+                      <span>Custom Domain Authorization (Firebase Auth)</span>
+                    </h4>
+                    <p className="text-[11px] text-indigo-800/80 mt-1 leading-relaxed">
+                      If you host PlayBook on Vercel or a custom domain, Google Sign-In requires your domain to be whitelisted in Firebase Console:
+                    </p>
+                    <ol className="list-decimal list-inside text-[11px] text-indigo-900 mt-1.5 space-y-0.5">
+                      <li>Go to Firebase Console &gt; Authentication &gt; Settings</li>
+                      <li>Select <strong>Authorized domains</strong> &gt; Add domain</li>
+                      <li>
+                        Paste:{' '}
+                        <code className="px-1.5 py-0.5 bg-white border border-indigo-200 rounded text-indigo-900 font-mono text-[10px]">
+                          {typeof window !== 'undefined' ? window.location.hostname : 'play-book-beta.vercel.app'}
+                        </code>
+                      </li>
+                    </ol>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (typeof window !== 'undefined') {
+                        navigator.clipboard.writeText(window.location.hostname);
+                        setCopiedDomain(true);
+                        setTimeout(() => setCopiedDomain(false), 2000);
+                      }
+                    }}
+                    className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-indigo-700 bg-white hover:bg-indigo-50 border border-indigo-200 rounded-lg shadow-xs transition-colors shrink-0"
+                  >
+                    {copiedDomain ? <Check size={13} className="text-emerald-600" /> : <Copy size={13} />}
+                    <span>{copiedDomain ? 'Copied' : 'Copy Domain'}</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}

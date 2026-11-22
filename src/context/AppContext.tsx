@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Client,
   Task,
@@ -135,8 +135,8 @@ const SEED_TASKS: Task[] = [
     totalTimeTrackedSeconds: 3600,
     deadlineAlertEnabled: true,
     notes: 'Urgent security verification audit due in 6 hours.',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: '2026-10-27T10:00:00.000Z',
+    updatedAt: '2026-10-27T10:00:00.000Z',
   },
   {
     id: 't-1',
@@ -242,7 +242,7 @@ const SEED_TIME_ENTRIES: TimeEntry[] = [
     billableAmount: 255,
     description: 'Built multi-currency transaction ledger table with filtering and sorting.',
     invoiceId: null,
-    createdAt: new Date().toISOString(),
+    createdAt: '2026-10-27T12:00:00.000Z',
   },
   {
     id: 'te-2',
@@ -620,6 +620,20 @@ const SEED_SUBSCRIPTIONS: Subscription[] = [
   },
 ];
 
+const SEED_ID_SET = new Set<string>([
+  ...SEED_CLIENTS.map((c) => c.id),
+  ...SEED_TASKS.map((t) => t.id),
+  ...SEED_TIME_ENTRIES.map((te) => te.id),
+  ...SEED_INVOICES.map((inv) => inv.id),
+  ...SEED_PAYMENTS.map((p) => p.id),
+  ...SEED_SCHEDULES.map((s) => s.id),
+  ...SEED_GOALS.map((g) => g.id),
+  ...SEED_BUDGET_CATEGORIES.map((b) => b.id),
+  ...SEED_EXPENSES.map((e) => e.id),
+  ...SEED_SUBSCRIPTIONS.map((sub) => sub.id),
+  'pb-1',
+]);
+
 const SEED_SETTINGS: UserSettings = {
   userName: 'Sarah Jenkins',
   userEmail: 'sarah.jenkins.dev@gmail.com',
@@ -804,12 +818,82 @@ interface AppContextType {
   // Search & Global state
   searchQuery: string;
   setSearchQuery: (q: string) => void;
+
+  // Workspace Backup & Cross-Domain Recovery
+  exportWorkspaceJSON: () => string;
+  importWorkspaceJSON: (jsonStr: string) => boolean;
+  restoreEmergencyBackup: () => boolean;
+  hasEmergencyBackup: boolean;
+  retryCloudSync: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+/**
+ * Owner-aware, non-destructive collection merger:
+ * - Never re-injects demo SEED_* items into an existing cloud workspace when localStorage is fresh/unowned.
+ * - Preserves genuinely user-created local/offline records and newer updates.
+ * - Respects user deletions via deletedIds tombstones.
+ */
+function mergeCollections<T extends { id?: string; updatedAt?: string; createdAt?: string }>(
+  cloudList: T[] | undefined,
+  localList: T[],
+  options: {
+    treatLocalAsUserOwned: boolean;
+    deletedIds: Set<string>;
+  }
+): T[] {
+  const { treatLocalAsUserOwned, deletedIds } = options;
+
+  // If cloud has this collection and local storage only held default SEED_* data (or belonged to a different user),
+  // trust the cloud collection verbatim (even if empty []) so deleted demo items never resurrect!
+  if (Array.isArray(cloudList) && !treatLocalAsUserOwned) {
+    return cloudList;
+  }
+
+  // If cloud does not have this field at all yet, keep user-owned local items or seed defaults
+  if (!Array.isArray(cloudList)) {
+    return Array.isArray(localList)
+      ? localList.filter((item) => !item?.id || !deletedIds.has(item.id))
+      : [];
+  }
+
+  if (!Array.isArray(localList) || localList.length === 0) {
+    return cloudList.filter((item) => !item?.id || !deletedIds.has(item.id));
+  }
+
+  const map = new Map<string, T>();
+
+  // 1. Seed with cloud items (excluding anything explicitly deleted locally)
+  for (const item of cloudList) {
+    if (item && item.id && !deletedIds.has(item.id)) {
+      map.set(item.id, item);
+    }
+  }
+
+  // 2. Merge user-owned local items
+  for (const item of localList) {
+    if (!item || !item.id || deletedIds.has(item.id)) continue;
+
+    if (!map.has(item.id)) {
+      // Never resurrect untouched default SEED_* items that the user already deleted from their cloud workspace
+      if (SEED_ID_SET.has(item.id)) continue;
+      map.set(item.id, item);
+    } else {
+      const cloudItem = map.get(item.id)!;
+      const localTime = new Date(item.updatedAt || item.createdAt || 0).getTime();
+      const cloudTime = new Date(cloudItem.updatedAt || cloudItem.createdAt || 0).getTime();
+      if (localTime > cloudTime) {
+        map.set(item.id, item);
+      }
+    }
+  }
+
+  return Array.from(map.values());
+}
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { currentUser, setSyncStatus, setLastSyncedAt } = useAuth();
+  const { currentUser, setSyncStatus, setSyncError, setLastSyncedAt } = useAuth();
 
   // Navigation
   const [activePage, setActivePage] = useState<string>('dashboard');
@@ -831,6 +915,87 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.error(`Failed to save ${key}:`, err);
     }
   };
+
+  // Tab-session flag (captured before setting so we know if this is a fresh window/app-update vs in-tab refresh)
+  const isSameTabSessionRef = useRef<boolean>(false);
+  if (typeof window !== 'undefined' && !isSameTabSessionRef.current) {
+    try {
+      isSameTabSessionRef.current = sessionStorage.getItem('freelanceos_tab_active') === '1';
+    } catch {}
+  }
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('freelanceos_tab_active', '1');
+    } catch {}
+  }, []);
+
+  // Detect whether localStorage already contained non-seed user data before this boot (across ALL collections)
+  const initialHasCustomLocalDataRef = useRef<boolean>(false);
+  if (typeof window !== 'undefined' && !initialHasCustomLocalDataRef.current) {
+    try {
+      const owner = localStorage.getItem('freelanceos_owner_uid');
+      const dirty = localStorage.getItem('freelanceos_local_dirty') === 'true';
+      if (owner || dirty) {
+        initialHasCustomLocalDataRef.current = true;
+      } else {
+        const legacyKeys = [
+          'freelanceos_tasks',
+          'freelanceos_clients',
+          'freelanceos_plan_budgets',
+          'freelanceos_budget_categories',
+          'freelanceos_expenses',
+          'freelanceos_subscriptions',
+          'freelanceos_invoices',
+          'freelanceos_payments',
+          'freelanceos_schedules',
+          'freelanceos_goals',
+          'freelanceos_time_entries',
+          'freelanceos_personal_sessions',
+          'freelanceos_workday_history',
+        ];
+        const hasAnyNonSeedItem = legacyKeys.some((storageKey) => {
+          const raw = localStorage.getItem(storageKey);
+          if (!raw) return false;
+          const parsed = JSON.parse(raw);
+          return Array.isArray(parsed) && parsed.some((item: any) => item?.id && !SEED_ID_SET.has(item.id));
+        });
+        if (hasAnyNonSeedItem) {
+          initialHasCustomLocalDataRef.current = true;
+          localStorage.setItem('freelanceos_owner_uid', 'local');
+          localStorage.setItem('freelanceos_local_dirty', 'true');
+        }
+      }
+    } catch {}
+  }
+
+  const currentUidRef = useRef<string | null>(currentUser?.uid || null);
+  currentUidRef.current = currentUser?.uid || null;
+
+  const markLocalEdit = useCallback((deletedId?: string) => {
+    try {
+      const uid = currentUidRef.current;
+      const existingOwner = localStorage.getItem('freelanceos_owner_uid');
+      if (uid && !uid.startsWith('local-user-')) {
+        localStorage.setItem('freelanceos_owner_uid', uid);
+      } else if (!existingOwner) {
+        localStorage.setItem('freelanceos_owner_uid', 'local');
+      }
+      localStorage.setItem('freelanceos_local_dirty', 'true');
+      localStorage.setItem('freelanceos_local_updated_at', new Date().toISOString());
+
+      if (deletedId) {
+        const rawDeleted = localStorage.getItem('freelanceos_deleted_ids');
+        const arr: string[] = rawDeleted ? JSON.parse(rawDeleted) : [];
+        if (!arr.includes(deletedId)) {
+          const next = [...arr, deletedId].slice(-500);
+          localStorage.setItem('freelanceos_deleted_ids', JSON.stringify(next));
+        }
+      }
+    } catch (err) {
+      console.warn('Could not record local edit metadata:', err);
+    }
+  }, []);
 
   // User Settings state declared early
   const [settings, setSettings] = useState<UserSettings>(() => loadStored('settings', SEED_SETTINGS));
@@ -878,8 +1043,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [companyProfile]);
 
   const updateCompanyProfile = useCallback((updates: Partial<CompanyProfile>) => {
+    markLocalEdit();
     setCompanyProfile((prev: CompanyProfile) => ({ ...prev, ...updates }));
-  }, []);
+  }, [markLocalEdit]);
 
   const DEFAULT_PLAN_BUDGETS: PlanBudget[] = [
     {
@@ -899,7 +1065,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         { category: 'Business Expenses', plannedAmount: 350 },
       ],
       notes: 'Quarterly planned budget allocations across operating categories.',
-      createdAt: new Date().toISOString(),
+      createdAt: '2026-10-01T10:00:00.000Z',
     },
   ];
 
@@ -912,6 +1078,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [planBudgets]);
 
   const addPlanBudget = useCallback((budgetData: Omit<PlanBudget, 'id' | 'createdAt'>): PlanBudget => {
+    markLocalEdit();
     const now = new Date().toISOString();
     const newBudget: PlanBudget = {
       ...budgetData,
@@ -920,17 +1087,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setPlanBudgets((prev: PlanBudget[]) => [newBudget, ...prev]);
     return newBudget;
-  }, []);
+  }, [markLocalEdit]);
 
   const updatePlanBudget = useCallback((id: string, updates: Partial<PlanBudget>) => {
+    markLocalEdit();
     setPlanBudgets((prev: PlanBudget[]) =>
       prev.map((b) => (b.id === id ? { ...b, ...updates, updatedAt: new Date().toISOString() } : b))
     );
-  }, []);
+  }, [markLocalEdit]);
 
   const deletePlanBudget = useCallback((id: string) => {
+    markLocalEdit(id);
     setPlanBudgets((prev: PlanBudget[]) => prev.filter((b) => b.id !== id));
-  }, []);
+  }, [markLocalEdit]);
 
   // Modals & Panels
   const [quickAddOpen, setQuickAddOpen] = useState(false);
@@ -1051,7 +1220,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => saveStored('settings', settings), [settings]);
   useEffect(() => saveStored('notifications', notifications), [notifications]);
 
-  // Active Timer Persistence
+  // Active Timer Persistence (never auto-runs across fresh window/updates or past days)
   const [activeTimer, setActiveTimer] = useState<ActiveTimer>(() => {
     const defaultTimer: ActiveTimer = {
       isRunning: false,
@@ -1066,7 +1235,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       hourlyRate: 50,
       description: '',
     };
-    return loadStored('active_timer', defaultTimer);
+    const stored = loadStored('active_timer', defaultTimer);
+    if (!stored || typeof stored !== 'object') return defaultTimer;
+
+    if (stored.isRunning && !stored.isPaused) {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const startDateStr = stored.startTime ? new Date(stored.startTime).toISOString().split('T')[0] : todayStr;
+      let isSameTab = false;
+      let lastHeartbeat = 0;
+      try {
+        isSameTab = sessionStorage.getItem('freelanceos_tab_active') === '1';
+        lastHeartbeat = Number(localStorage.getItem('freelanceos_timer_heartbeat') || 0);
+      } catch {}
+
+      // If opened in a fresh window/update OR from a past day, pause cleanly instead of auto-running
+      if (!isSameTab || startDateStr !== todayStr) {
+        const refTs = lastHeartbeat && stored.lastResumedTime && lastHeartbeat >= stored.lastResumedTime
+          ? lastHeartbeat
+          : (stored.lastResumedTime || Date.now());
+        const boundedAdded = stored.lastResumedTime
+          ? Math.max(0, Math.min(8 * 3600, Math.floor((refTs - stored.lastResumedTime) / 1000)))
+          : 0;
+        return {
+          ...stored,
+          isPaused: true,
+          accumulatedSeconds: (stored.accumulatedSeconds || 0) + boundedAdded,
+          lastResumedTime: null,
+        };
+      }
+    }
+    return stored;
   });
 
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(() => {
@@ -1206,6 +1404,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: nowISO,
     };
 
+    markLocalEdit();
     setTimeEntries((prev) => [newEntry, ...prev]);
 
     if (activeTimer.projectId) {
@@ -1247,7 +1446,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (settings.notificationPreferences.sound) {
       playNotificationChime('complete');
     }
-  }, [activeTimer, settings.notificationPreferences.sound]);
+  }, [activeTimer, settings.notificationPreferences.sound, markLocalEdit]);
 
   const clearActiveTimer = useCallback(() => {
     setActiveTimer({
@@ -1297,7 +1496,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const [workdayState, setWorkdayState] = useState<WorkdayState>(() => {
-    return loadStored('workday_timer_state', DEFAULT_WORKDAY_STATE);
+    const stored = loadStored('workday_timer_state', DEFAULT_WORKDAY_STATE);
+    if (!stored || typeof stored !== 'object') return DEFAULT_WORKDAY_STATE;
+
+    if (stored.status === 'working' || stored.status === 'on_break') {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const startDateStr = stored.workdayStartTime
+        ? new Date(stored.workdayStartTime).toISOString().split('T')[0]
+        : todayStr;
+      let isSameTab = false;
+      let lastHeartbeat = 0;
+      try {
+        isSameTab = sessionStorage.getItem('freelanceos_tab_active') === '1';
+        lastHeartbeat = Number(localStorage.getItem('freelanceos_timer_heartbeat') || 0);
+      } catch {}
+
+      if (!isSameTab || startDateStr !== todayStr) {
+        if (startDateStr !== todayStr) {
+          // New day: start workday timer clean and idle
+          return {
+            ...DEFAULT_WORKDAY_STATE,
+            targetWorkMinutes: stored.targetWorkMinutes || 240,
+            targetBreakMinutes: stored.targetBreakMinutes || 15,
+          };
+        }
+        // Fresh window/update on same day: pause cleanly instead of auto-running
+        const refTs = lastHeartbeat && lastHeartbeat >= (stored.currentIntervalStartTime || stored.currentBreakStartTime || 0)
+          ? lastHeartbeat
+          : Date.now();
+        let newAccWork = stored.accumulatedWorkSeconds || 0;
+        let newAccBreak = stored.accumulatedBreakSeconds || 0;
+        if (stored.status === 'working' && stored.currentIntervalStartTime) {
+          newAccWork += Math.max(0, Math.min(8 * 3600, Math.floor((refTs - stored.currentIntervalStartTime) / 1000)));
+        } else if (stored.status === 'on_break' && stored.currentBreakStartTime) {
+          newAccBreak += Math.max(0, Math.min(4 * 3600, Math.floor((refTs - stored.currentBreakStartTime) / 1000)));
+        }
+        return {
+          ...stored,
+          previousStatusBeforePause: stored.status,
+          status: 'paused',
+          pausedAt: refTs,
+          accumulatedWorkSeconds: newAccWork,
+          currentIntervalStartTime: null,
+          accumulatedBreakSeconds: newAccBreak,
+          currentBreakStartTime: null,
+        };
+      }
+    }
+    return stored;
   });
 
   const [workdayHistory, setWorkdayHistory] = useState<WorkdaySummary[]>(() => {
@@ -1306,6 +1552,75 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [workdaySummary, setWorkdaySummary] = useState<WorkdaySummary | null>(null);
   const [workdaySummaryOpen, setWorkdaySummaryOpen] = useState(false);
+
+  // Finalize any stale/orphaned in_progress personalSessions when workday timer is not actively working
+  const finalizeOrphanedSessions = useCallback(
+    (sessions: PersonalWorkSession[], isActivelyWorkingNow: boolean): PersonalWorkSession[] => {
+      if (!Array.isArray(sessions)) return [];
+      const todayStr = new Date().toISOString().split('T')[0];
+      let lastHeartbeat = 0;
+      try {
+        lastHeartbeat = Number(localStorage.getItem('freelanceos_timer_heartbeat') || 0);
+      } catch {}
+
+      return sessions.map((s) => {
+        if (s.status !== 'in_progress') return s;
+        const isPastDay = s.date && s.date !== todayStr;
+        if (!isActivelyWorkingNow || isPastDay) {
+          const fallbackEnd =
+            lastHeartbeat && lastHeartbeat >= s.startTimestamp
+              ? lastHeartbeat
+              : Math.min(Date.now(), s.startTimestamp + 60 * 1000);
+          const safeEnd = Math.max(s.startTimestamp + 1000, fallbackEnd);
+          const duration = Math.max(1, Math.min(12 * 3600, Math.floor((safeEnd - s.startTimestamp) / 1000)));
+          return {
+            ...s,
+            endTime: new Date(safeEnd).toLocaleTimeString('en-US', {
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+            }),
+            endTimestamp: safeEnd,
+            durationSeconds: duration,
+            status: 'completed',
+          };
+        }
+        return s;
+      });
+    },
+    []
+  );
+
+  // Clean up any orphaned in_progress personal sessions on mount if workdayState isn't actively working
+  useEffect(() => {
+    const isWorking = workdayState.status === 'working';
+    setPersonalSessions((prev) => {
+      const hasOrphan = prev.some(
+        (s) => s.status === 'in_progress' && (!isWorking || s.date !== new Date().toISOString().split('T')[0])
+      );
+      if (!hasOrphan) return prev;
+      return finalizeOrphanedSessions(prev, isWorking);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Heartbeat timestamp while any timer is actively running so stale recovery never inflates elapsed hours
+  useEffect(() => {
+    const anyRunning =
+      (activeTimer.isRunning && !activeTimer.isPaused) ||
+      workdayState.status === 'working' ||
+      workdayState.status === 'on_break';
+    if (!anyRunning) return;
+
+    const writeHeartbeat = () => {
+      try {
+        localStorage.setItem('freelanceos_timer_heartbeat', String(Date.now()));
+      } catch {}
+    };
+    writeHeartbeat();
+    const hb = setInterval(writeHeartbeat, 5000);
+    return () => clearInterval(hb);
+  }, [activeTimer.isRunning, activeTimer.isPaused, workdayState.status]);
 
   useEffect(() => {
     saveStored('workday_timer_state', workdayState);
@@ -1319,117 +1634,318 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // CLOUD DATABASE SYNC (UNIQUE USER ID)
   // ==========================================
   const [isCloudLoaded, setIsCloudLoaded] = useState(false);
+  const isCloudLoadedRef = useRef(false);
+  isCloudLoadedRef.current = isCloudLoaded;
 
-  // Sync from cloud on login
-  useEffect(() => {
-    let isCancelled = false;
-    async function syncOnLogin() {
-      if (!currentUser?.uid) {
-        setIsCloudLoaded(false);
-        return;
-      }
-      if (currentUser.uid.startsWith('local-user-')) {
-        setIsCloudLoaded(true);
-        setSyncStatus('idle');
-        return;
-      }
-      try {
-        setSyncStatus('syncing');
-        const cloudData = await loadUserWorkspace(currentUser.uid);
-        if (isCancelled) return;
-
-        if (cloudData) {
-          if (Array.isArray(cloudData.clients)) setClients(cloudData.clients);
-          if (Array.isArray(cloudData.tasks)) setTasks(cloudData.tasks);
-          if (Array.isArray(cloudData.timeEntries)) setTimeEntries(cloudData.timeEntries);
-          if (Array.isArray(cloudData.invoices)) setInvoices(cloudData.invoices);
-          if (Array.isArray(cloudData.payments)) setPayments(cloudData.payments);
-          if (Array.isArray(cloudData.schedules)) setSchedules(cloudData.schedules);
-          if (Array.isArray(cloudData.goals)) setGoals(cloudData.goals);
-          if (Array.isArray(cloudData.budgetCategories)) setBudgetCategories(cloudData.budgetCategories);
-          if (Array.isArray(cloudData.expenses)) setExpenses(cloudData.expenses);
-          if (Array.isArray(cloudData.subscriptions)) setSubscriptions(cloudData.subscriptions);
-          if (cloudData.companyProfile) setCompanyProfile(cloudData.companyProfile);
-          if (Array.isArray(cloudData.workdayHistory)) setWorkdayHistory(cloudData.workdayHistory);
-          if (Array.isArray(cloudData.personalSessions)) setPersonalSessions(cloudData.personalSessions);
-          if (cloudData.settings) setSettings(cloudData.settings);
-        } else {
-          // First time sign-in: write initial state to Firestore under unique user ID
-          await saveUserWorkspace(currentUser.uid, {
-            clients,
-            tasks,
-            timeEntries,
-            invoices,
-            payments,
-            schedules,
-            goals,
-            budgetCategories,
-            expenses,
-            subscriptions,
-            companyProfile,
-            workdayHistory,
-            personalSessions,
-            settings,
-          });
-        }
-        setSyncStatus('synced');
-        setLastSyncedAt(new Date().toLocaleTimeString());
-        setIsCloudLoaded(true);
-      } catch (err) {
-        console.error('Error synchronizing cloud workspace:', err);
-        setSyncStatus('error');
-      }
+  const [hasEmergencyBackup, setHasEmergencyBackup] = useState<boolean>(() => {
+    try {
+      return !!(
+        localStorage.getItem('freelanceos_workspace_emergency_backup') ||
+        localStorage.getItem('freelanceos_workspace_emergency_backup_prev')
+      );
+    } catch {
+      return false;
     }
+  });
 
-    syncOnLogin();
-    return () => {
-      isCancelled = true;
-    };
-  }, [currentUser?.uid]);
-
-  // Automatically save workspace changes under unique user ID
-  useEffect(() => {
-    if (!currentUser?.uid || currentUser.uid.startsWith('local-user-') || !isCloudLoaded) return;
-
-    const timeout = setTimeout(async () => {
-      try {
-        setSyncStatus('syncing');
-        await saveUserWorkspace(currentUser.uid, {
-          clients,
-          tasks,
-          timeEntries,
-          invoices,
-          payments,
-          schedules,
-          goals,
-          budgetCategories,
-          expenses,
-          subscriptions,
-          companyProfile,
-          workdayHistory,
-          personalSessions,
-          settings,
-        });
-        setSyncStatus('synced');
-        setLastSyncedAt(new Date().toLocaleTimeString());
-      } catch (err) {
-        console.error('Cloud auto-save failed:', err);
-        setSyncStatus('error');
-      }
-    }, 1500);
-
-    return () => clearTimeout(timeout);
-  }, [
-    currentUser?.uid,
-    isCloudLoaded,
+  // Always hold the latest workspace snapshot in a ref for instant flush on pagehide/reload
+  const latestWorkspaceRef = useRef({
     clients,
     tasks,
+    planBudgets,
+    budgetCategories,
     timeEntries,
     invoices,
     payments,
     schedules,
     goals,
+    expenses,
+    subscriptions,
+    companyProfile,
+    workdayHistory,
+    personalSessions,
+    settings,
+  });
+  latestWorkspaceRef.current = {
+    clients,
+    tasks,
+    planBudgets,
     budgetCategories,
+    timeEntries,
+    invoices,
+    payments,
+    schedules,
+    goals,
+    expenses,
+    subscriptions,
+    companyProfile,
+    workdayHistory,
+    personalSessions,
+    settings,
+  };
+
+  const workdayStatusRef = useRef(workdayState.status);
+  workdayStatusRef.current = workdayState.status;
+
+  const syncInProgressRef = useRef(false);
+
+  const performCloudSync = useCallback(async (uid: string, isCancelledCheck?: () => boolean) => {
+    if (!uid || uid.startsWith('local-user-')) {
+      setIsCloudLoaded(true);
+      setSyncStatus('idle');
+      setSyncError(null);
+      return;
+    }
+    if (syncInProgressRef.current) return;
+    syncInProgressRef.current = true;
+
+    try {
+      setSyncStatus('syncing');
+      setSyncError(null);
+
+      const snapshot = latestWorkspaceRef.current;
+
+      // Preserve secondary emergency backup before updating primary pre-sync snapshot
+      try {
+        const existingBackup = localStorage.getItem('freelanceos_workspace_emergency_backup');
+        if (existingBackup) {
+          localStorage.setItem('freelanceos_workspace_emergency_backup_prev', existingBackup);
+        }
+        localStorage.setItem(
+          'freelanceos_workspace_emergency_backup',
+          JSON.stringify({ timestamp: new Date().toISOString(), ...snapshot })
+        );
+        setHasEmergencyBackup(true);
+      } catch (e) {
+        console.warn('Could not store pre-sync snapshot:', e);
+      }
+
+      const cloudData = await loadUserWorkspace(uid);
+      if (isCancelledCheck?.()) return;
+
+      // Determine whether localStorage holds genuine user-owned data for this user (or offline local-mode work)
+      let storedOwner: string | null = null;
+      let localDirty = false;
+      let deletedIds = new Set<string>();
+      try {
+        storedOwner = localStorage.getItem('freelanceos_owner_uid');
+        localDirty = localStorage.getItem('freelanceos_local_dirty') === 'true';
+        const rawDeleted = localStorage.getItem('freelanceos_deleted_ids');
+        if (rawDeleted) {
+          const parsed = JSON.parse(rawDeleted);
+          if (Array.isArray(parsed)) deletedIds = new Set(parsed);
+        }
+      } catch {}
+
+      const belongsToAnotherAccount = Boolean(storedOwner && storedOwner !== 'local' && storedOwner !== uid);
+      const hasNonSeedLocalRecords = !belongsToAnotherAccount && [
+        snapshot.tasks,
+        snapshot.clients,
+        snapshot.planBudgets,
+        snapshot.budgetCategories,
+        snapshot.expenses,
+        snapshot.subscriptions,
+        snapshot.invoices,
+        snapshot.payments,
+        snapshot.schedules,
+        snapshot.goals,
+        snapshot.timeEntries,
+        snapshot.personalSessions,
+        snapshot.workdayHistory,
+      ].some((arr) => Array.isArray(arr) && arr.some((item: any) => item?.id && !SEED_ID_SET.has(item.id)));
+
+      const treatLocalAsUserOwned =
+        (storedOwner === uid && localDirty) ||
+        (storedOwner === 'local' && localDirty) ||
+        initialHasCustomLocalDataRef.current ||
+        hasNonSeedLocalRecords;
+
+      if (cloudData) {
+        const mergeOpts = { treatLocalAsUserOwned, deletedIds };
+
+        const mergedTasks = mergeCollections(cloudData.tasks, snapshot.tasks, mergeOpts);
+        const mergedClients = mergeCollections(cloudData.clients, snapshot.clients, mergeOpts);
+        const mergedPlanBudgets = mergeCollections(cloudData.planBudgets, snapshot.planBudgets, mergeOpts);
+        const mergedBudgetCategories = mergeCollections(cloudData.budgetCategories, snapshot.budgetCategories, mergeOpts);
+        const mergedTimeEntries = mergeCollections(cloudData.timeEntries, snapshot.timeEntries, mergeOpts);
+        const mergedInvoices = mergeCollections(cloudData.invoices, snapshot.invoices, mergeOpts);
+        const mergedPayments = mergeCollections(cloudData.payments, snapshot.payments, mergeOpts);
+        const mergedSchedules = mergeCollections(cloudData.schedules, snapshot.schedules, mergeOpts);
+        const mergedGoals = mergeCollections(cloudData.goals, snapshot.goals, mergeOpts);
+        const mergedExpenses = mergeCollections(cloudData.expenses, snapshot.expenses, mergeOpts);
+        const mergedSubscriptions = mergeCollections(cloudData.subscriptions, snapshot.subscriptions, mergeOpts);
+        const rawMergedPersonalSessions = mergeCollections(cloudData.personalSessions, snapshot.personalSessions, mergeOpts);
+        const mergedPersonalSessions = finalizeOrphanedSessions(
+          rawMergedPersonalSessions,
+          workdayStatusRef.current === 'working'
+        );
+        const mergedWorkdayHistory = mergeCollections(cloudData.workdayHistory, snapshot.workdayHistory, mergeOpts);
+        const resolvedCompanyProfile = cloudData.companyProfile || snapshot.companyProfile;
+        const resolvedSettings = cloudData.settings
+          ? { ...snapshot.settings, ...cloudData.settings }
+          : snapshot.settings;
+
+        setTasks(mergedTasks);
+        setClients(mergedClients);
+        setPlanBudgets(mergedPlanBudgets);
+        setBudgetCategories(mergedBudgetCategories);
+        setTimeEntries(mergedTimeEntries);
+        setInvoices(mergedInvoices);
+        setPayments(mergedPayments);
+        setSchedules(mergedSchedules);
+        setGoals(mergedGoals);
+        setExpenses(mergedExpenses);
+        setSubscriptions(mergedSubscriptions);
+        setPersonalSessions(mergedPersonalSessions);
+        setWorkdayHistory(mergedWorkdayHistory);
+        if (resolvedCompanyProfile) setCompanyProfile(resolvedCompanyProfile);
+        if (resolvedSettings) setSettings(resolvedSettings);
+
+        const hadOrphanedSessionsCleaned =
+          rawMergedPersonalSessions.length !== mergedPersonalSessions.length ||
+          rawMergedPersonalSessions.some((s, idx) => s.status !== mergedPersonalSessions[idx]?.status);
+
+        // Only push back to Firestore if we merged local edits, cleaned orphaned sessions, or cloud lacked planBudgets
+        const needsBackfill =
+          treatLocalAsUserOwned ||
+          hadOrphanedSessionsCleaned ||
+          !Array.isArray(cloudData.planBudgets);
+
+        if (needsBackfill) {
+          await saveUserWorkspace(uid, {
+            clients: mergedClients,
+            tasks: mergedTasks,
+            planBudgets: mergedPlanBudgets,
+            budgetCategories: mergedBudgetCategories,
+            timeEntries: mergedTimeEntries,
+            invoices: mergedInvoices,
+            payments: mergedPayments,
+            schedules: mergedSchedules,
+            goals: mergedGoals,
+            expenses: mergedExpenses,
+            subscriptions: mergedSubscriptions,
+            companyProfile: resolvedCompanyProfile,
+            workdayHistory: mergedWorkdayHistory,
+            personalSessions: mergedPersonalSessions,
+            settings: resolvedSettings,
+          });
+        }
+      } else {
+        // First time sign-in for this user ID: write initial state to Firestore
+        await saveUserWorkspace(uid, snapshot);
+      }
+
+      try {
+        localStorage.setItem('freelanceos_owner_uid', uid);
+        localStorage.setItem('freelanceos_local_dirty', 'false');
+        localStorage.removeItem('freelanceos_deleted_ids');
+        initialHasCustomLocalDataRef.current = false;
+      } catch {}
+
+      setSyncStatus('synced');
+      setSyncError(null);
+      setLastSyncedAt(new Date().toLocaleTimeString());
+      setIsCloudLoaded(true);
+    } catch (err: any) {
+      console.error('Error synchronizing cloud workspace:', err);
+      setSyncStatus('error');
+      setSyncError(err?.message || 'Unable to reach cloud database');
+    } finally {
+      syncInProgressRef.current = false;
+    }
+  }, [setSyncStatus, setSyncError, setLastSyncedAt]);
+
+  // Sync from cloud on login
+  useEffect(() => {
+    let isCancelled = false;
+    if (!currentUser?.uid) {
+      setIsCloudLoaded(false);
+      return;
+    }
+    performCloudSync(currentUser.uid, () => isCancelled);
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentUser?.uid, performCloudSync]);
+
+  const retryCloudSync = useCallback(async () => {
+    if (!currentUser?.uid) return;
+    await performCloudSync(currentUser.uid);
+  }, [currentUser?.uid, performCloudSync]);
+
+  // Auto-retry cloud sync if connection comes back online while in error state
+  useEffect(() => {
+    const handleOnline = () => {
+      if (currentUidRef.current && !currentUidRef.current.startsWith('local-user-') && !isCloudLoadedRef.current) {
+        performCloudSync(currentUidRef.current);
+      }
+    };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [performCloudSync]);
+
+  // Immediate flush helper for pagehide / visibilitychange / beforeunload
+  const flushCloudSave = useCallback(async () => {
+    const uid = currentUidRef.current;
+    if (!uid || uid.startsWith('local-user-') || !isCloudLoadedRef.current) return;
+    try {
+      setSyncStatus('syncing');
+      await saveUserWorkspace(uid, latestWorkspaceRef.current);
+      try {
+        localStorage.setItem('freelanceos_owner_uid', uid);
+        localStorage.setItem('freelanceos_local_dirty', 'false');
+      } catch {}
+      setSyncStatus('synced');
+      setSyncError(null);
+      setLastSyncedAt(new Date().toLocaleTimeString());
+    } catch (err: any) {
+      console.error('Cloud flush save failed:', err);
+      setSyncStatus('error');
+      setSyncError(err?.message || 'Cloud save failed');
+    }
+  }, [setSyncStatus, setSyncError, setLastSyncedAt]);
+
+  useEffect(() => {
+    const onVisibilityOrHide = () => {
+      if (document.visibilityState === 'hidden') {
+        flushCloudSave();
+      }
+    };
+    const onPageHide = () => {
+      flushCloudSave();
+    };
+    document.addEventListener('visibilitychange', onVisibilityOrHide);
+    window.addEventListener('pagehide', onPageHide);
+    window.addEventListener('beforeunload', onPageHide);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityOrHide);
+      window.removeEventListener('pagehide', onPageHide);
+      window.removeEventListener('beforeunload', onPageHide);
+    };
+  }, [flushCloudSave]);
+
+  // Automatically save workspace changes under unique user ID (fast 450ms debounce)
+  useEffect(() => {
+    if (!currentUser?.uid || currentUser.uid.startsWith('local-user-') || !isCloudLoaded) return;
+
+    const timeout = setTimeout(async () => {
+      await flushCloudSave();
+    }, 450);
+
+    return () => clearTimeout(timeout);
+  }, [
+    currentUser?.uid,
+    isCloudLoaded,
+    flushCloudSave,
+    clients,
+    tasks,
+    planBudgets,
+    budgetCategories,
+    timeEntries,
+    invoices,
+    payments,
+    schedules,
+    goals,
     expenses,
     subscriptions,
     companyProfile,
@@ -1548,10 +2064,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [personalSessions]);
 
   const deletePersonalSession = useCallback((id: string) => {
+    markLocalEdit(id);
     setPersonalSessions((prev) => prev.filter((s) => s.id !== id));
-  }, []);
+  }, [markLocalEdit]);
 
   const startWorkday = useCallback(() => {
+    markLocalEdit();
     const now = Date.now();
     const todayStr = new Date(now).toISOString().split('T')[0];
 
@@ -1595,9 +2113,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     addNotification('Personal Timer Started', 'Personal working session started.', 'info', 'today');
-  }, [personalSessions, addNotification]);
+  }, [personalSessions, addNotification, markLocalEdit]);
 
   const pauseWorkday = useCallback(() => {
+    markLocalEdit();
     const now = Date.now();
 
     // Close the in_progress session and save its duration permanently
@@ -1640,34 +2159,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         currentBreakStartTime: null,
       };
     });
-  }, []);
+  }, [markLocalEdit]);
 
   const resumeWorkday = useCallback(() => {
+    if (workdayState.status !== 'paused') return;
+    markLocalEdit();
     const now = Date.now();
     const todayStr = new Date(now).toISOString().split('T')[0];
+    const targetStatus = workdayState.previousStatusBeforePause === 'on_break' ? 'on_break' : 'working';
+
+    if (targetStatus === 'working') {
+      setPersonalSessions((sessions) => {
+        if (sessions.some((s) => s.status === 'in_progress')) return sessions;
+        const newSession: PersonalWorkSession = {
+          id: `pws-${now}-${Math.random().toString(36).substring(2, 7)}`,
+          date: todayStr,
+          startTime: formatSessionClock(now),
+          endTime: null,
+          startTimestamp: now,
+          endTimestamp: null,
+          durationSeconds: 0,
+          status: 'in_progress',
+          createdAt: new Date(now).toISOString(),
+        };
+        return [newSession, ...sessions];
+      });
+    }
 
     setWorkdayState((prev) => {
       if (prev.status !== 'paused') return prev;
-      const targetStatus = prev.previousStatusBeforePause === 'on_break' ? 'on_break' : 'working';
-
-      if (targetStatus === 'working') {
-        setPersonalSessions((sessions) => {
-          if (sessions.some((s) => s.status === 'in_progress')) return sessions;
-          const newSession: PersonalWorkSession = {
-            id: `pws-${now}-${Math.random().toString(36).substring(2, 7)}`,
-            date: todayStr,
-            startTime: formatSessionClock(now),
-            endTime: null,
-            startTimestamp: now,
-            endTimestamp: null,
-            durationSeconds: 0,
-            status: 'in_progress',
-            createdAt: new Date(now).toISOString(),
-          };
-          return [newSession, ...sessions];
-        });
-      }
-
       return {
         ...prev,
         status: targetStatus,
@@ -1678,9 +2198,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           targetStatus === 'working' ? prev.workSessionsCount + 1 : prev.workSessionsCount,
       };
     });
-  }, []);
+  }, [workdayState.status, workdayState.previousStatusBeforePause, markLocalEdit]);
 
   const startBreak = useCallback(() => {
+    markLocalEdit();
     const now = Date.now();
 
     // Close in_progress working session
@@ -1722,9 +2243,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       'info',
       'today'
     );
-  }, [addNotification, workdayState.targetBreakMinutes]);
+  }, [addNotification, workdayState.targetBreakMinutes, markLocalEdit]);
 
   const resumeFromBreak = useCallback(() => {
+    markLocalEdit();
     const now = Date.now();
     const todayStr = new Date(now).toISOString().split('T')[0];
 
@@ -1762,9 +2284,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     });
     addNotification('Break Completed', 'Welcome back! Focus session started.', 'info', 'today');
-  }, [addNotification]);
+  }, [addNotification, markLocalEdit]);
 
   const skipBreak = useCallback(() => {
+    markLocalEdit();
     const now = Date.now();
     const todayStr = new Date(now).toISOString().split('T')[0];
 
@@ -1801,9 +2324,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         workIntervalAlerted: false,
       };
     });
-  }, []);
+  }, [markLocalEdit]);
 
   const endWorkday = useCallback(() => {
+    markLocalEdit();
     const now = Date.now();
     const todayStr = new Date(now).toISOString().split('T')[0];
 
@@ -1880,7 +2404,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       'success',
       'today'
     );
-  }, [workdayState, settings.notificationPreferences.sound, addNotification]);
+  }, [workdayState, settings.notificationPreferences.sound, addNotification, markLocalEdit]);
 
   const updateWorkdayConfig = useCallback((targetWorkMinutes: number, targetBreakMinutes: number) => {
     setWorkdayState((prev) => ({
@@ -1891,13 +2415,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const saveWorkdaySummaryNotes = useCallback((id: string, notes: string) => {
+    markLocalEdit();
     setWorkdayHistory((prev) =>
       prev.map((item) => (item.id === id ? { ...item, notes } : item))
     );
     if (workdaySummary && workdaySummary.id === id) {
       setWorkdaySummary((prev) => (prev ? { ...prev, notes } : null));
     }
-  }, [workdaySummary]);
+  }, [workdaySummary, markLocalEdit]);
 
   // Periodic check for Work Interval Completion and Break Overdue Alerts
   useEffect(() => {
@@ -2069,6 +2594,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // CRUD Implementations
   const addClient = useCallback((clientData: Omit<Client, 'id' | 'createdAt' | 'updatedAt'>): Client => {
+    markLocalEdit();
     const now = new Date().toISOString();
     const newClient: Client = {
       ...clientData,
@@ -2079,20 +2605,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setClients((prev) => [newClient, ...prev]);
     addNotification('Client Added', `${newClient.fullName} was created successfully.`, 'success', 'contacts', newClient.id);
     return newClient;
-  }, [addNotification]);
+  }, [addNotification, markLocalEdit]);
 
   const updateClient = useCallback((id: string, updates: Partial<Client>) => {
+    markLocalEdit();
     const now = new Date().toISOString();
     setClients((prev) =>
       prev.map((c) => (c.id === id ? { ...c, ...updates, updatedAt: now } : c))
     );
-  }, []);
+  }, [markLocalEdit]);
 
   const deleteClient = useCallback((id: string) => {
+    markLocalEdit(id);
     setClients((prev) => prev.filter((c) => c.id !== id));
-  }, []);
+  }, [markLocalEdit]);
 
   const addTask = useCallback((taskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'amountPaid' | 'totalTimeTrackedSeconds'>): Task => {
+    markLocalEdit();
     const now = new Date().toISOString();
     const feePct = taskData.platformFeePercentage ?? (settings.platformFees[taskData.platform] ?? 0);
     const newTask: Task = {
@@ -2107,20 +2636,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTasks((prev) => [newTask, ...prev]);
     addNotification('Task Created', `Added task "${newTask.name}" under ${newTask.platform}.`, 'success', 'tasks', newTask.id);
     return newTask;
-  }, [settings.platformFees, addNotification]);
+  }, [settings.platformFees, addNotification, markLocalEdit]);
 
   const updateTask = useCallback((id: string, updates: Partial<Task>) => {
+    markLocalEdit();
     const now = new Date().toISOString();
     setTasks((prev) =>
       prev.map((t) => (t.id === id ? { ...t, ...updates, updatedAt: now } : t))
     );
-  }, []);
+  }, [markLocalEdit]);
 
   const deleteTask = useCallback((id: string) => {
+    markLocalEdit(id);
     setTasks((prev) => prev.filter((t) => t.id !== id));
-  }, []);
+  }, [markLocalEdit]);
 
   const completeTask = useCallback((id: string) => {
+    markLocalEdit();
     const now = new Date().toISOString();
     setTasks((prev) =>
       prev.map((t) => {
@@ -2129,24 +2661,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (t.platform === 'Fiverr') payoutDays = 15;
           else if (t.platform === 'Upwork') payoutDays = 5;
 
-          const expDate = payoutDays > 0 ? new Date(Date.now() + 86400000 * payoutDays).toISOString().split('T')[0] : undefined;
-
-          return {
+          const baseUpdate: Task = {
             ...t,
-            status: 'completed' as const,
+            status: 'completed',
             completedAt: now,
-            payoutExpectedDate: expDate,
-            payoutStatus: payoutDays > 0 ? ('pending' as const) : undefined,
             updatedAt: now,
           };
+
+          if (payoutDays > 0) {
+            baseUpdate.payoutExpectedDate = new Date(Date.now() + 86400000 * payoutDays).toISOString().split('T')[0];
+            baseUpdate.payoutStatus = 'pending';
+          }
+
+          return baseUpdate;
         }
         return t;
       })
     );
     addNotification('Task Completed', 'Great job! Task has been marked as complete.', 'success', 'tasks', id);
-  }, [addNotification]);
+  }, [addNotification, markLocalEdit]);
 
   const addTimeEntry = useCallback((entryData: Omit<TimeEntry, 'id' | 'createdAt'>): TimeEntry => {
+    markLocalEdit();
     const now = new Date().toISOString();
     const newEntry: TimeEntry = {
       ...entryData,
@@ -2165,17 +2701,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
     }
     return newEntry;
-  }, []);
+  }, [markLocalEdit]);
 
   const updateTimeEntry = useCallback((id: string, updates: Partial<TimeEntry>) => {
+    markLocalEdit();
     setTimeEntries((prev) => prev.map((te) => (te.id === id ? { ...te, ...updates } : te)));
-  }, []);
+  }, [markLocalEdit]);
 
   const deleteTimeEntry = useCallback((id: string) => {
+    markLocalEdit(id);
     setTimeEntries((prev) => prev.filter((te) => te.id !== id));
-  }, []);
+  }, [markLocalEdit]);
 
   const addInvoice = useCallback((invoiceData: Omit<Invoice, 'id' | 'createdAt' | 'updatedAt' | 'invoiceNumber'>): Invoice => {
+    markLocalEdit();
     const now = new Date().toISOString();
     const count = invoices.length + 1;
     const invNum = `INV-${new Date().getFullYear()}-${String(count).padStart(3, '0')}`;
@@ -2197,19 +2736,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     addNotification('Invoice Created', `Invoice ${newInvoice.invoiceNumber} for ${newInvoice.clientName} generated.`, 'success', 'time', newInvoice.id);
     return newInvoice;
-  }, [invoices.length, addNotification]);
+  }, [invoices.length, addNotification, markLocalEdit]);
 
   const updateInvoice = useCallback((id: string, updates: Partial<Invoice>) => {
+    markLocalEdit();
     const now = new Date().toISOString();
     setInvoices((prev) => prev.map((inv) => (inv.id === id ? { ...inv, ...updates, updatedAt: now } : inv)));
-  }, []);
+  }, [markLocalEdit]);
 
   const deleteInvoice = useCallback((id: string) => {
+    markLocalEdit(id);
     setInvoices((prev) => prev.filter((inv) => inv.id !== id));
     setTimeEntries((prev) => prev.map((te) => (te.invoiceId === id ? { ...te, invoiceId: null } : te)));
-  }, []);
+  }, [markLocalEdit]);
 
   const addPayment = useCallback((paymentData: Omit<Payment, 'id' | 'createdAt'>): Payment => {
+    markLocalEdit();
     const now = new Date().toISOString();
     const newPayment: Payment = {
       ...paymentData,
@@ -2256,17 +2798,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     addNotification('Payment Recorded', `Received ${paymentData.amount} ${paymentData.currency} from ${paymentData.clientName}.`, 'success', 'earnings', newPayment.id);
     return newPayment;
-  }, [addNotification]);
+  }, [addNotification, markLocalEdit]);
 
   const updatePayment = useCallback((id: string, updates: Partial<Payment>) => {
+    markLocalEdit();
     setPayments((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
-  }, []);
+  }, [markLocalEdit]);
 
   const deletePayment = useCallback((id: string) => {
+    markLocalEdit(id);
     setPayments((prev) => prev.filter((p) => p.id !== id));
-  }, []);
+  }, [markLocalEdit]);
 
   const addSchedule = useCallback((itemData: Omit<ScheduleItem, 'id' | 'createdAt' | 'isCompleted'>): ScheduleItem => {
+    markLocalEdit();
     const now = new Date().toISOString();
     const newItem: ScheduleItem = {
       ...itemData,
@@ -2277,23 +2822,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSchedules((prev) => [newItem, ...prev]);
     addNotification('Schedule Added', `Scheduled "${newItem.title}" for ${newItem.date} at ${newItem.startTime}.`, 'info', 'schedule', newItem.id);
     return newItem;
-  }, [addNotification]);
+  }, [addNotification, markLocalEdit]);
 
   const updateSchedule = useCallback((id: string, updates: Partial<ScheduleItem>) => {
+    markLocalEdit();
     setSchedules((prev) => prev.map((s) => (s.id === id ? { ...s, ...updates } : s)));
-  }, []);
+  }, [markLocalEdit]);
 
   const deleteSchedule = useCallback((id: string) => {
+    markLocalEdit(id);
     setSchedules((prev) => prev.filter((s) => s.id !== id));
-  }, []);
+  }, [markLocalEdit]);
 
   const toggleScheduleComplete = useCallback((id: string) => {
+    markLocalEdit();
     setSchedules((prev) =>
       prev.map((s) => (s.id === id ? { ...s, isCompleted: !s.isCompleted } : s))
     );
-  }, []);
+  }, [markLocalEdit]);
 
   const addGoal = useCallback((goalData: Omit<Goal, 'id' | 'createdAt' | 'isCompleted' | 'currentActualValue'>): Goal => {
+    markLocalEdit();
     const now = new Date().toISOString();
     const newGoal: Goal = {
       ...goalData,
@@ -2305,17 +2854,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setGoals((prev) => [newGoal, ...prev]);
     addNotification('Goal Created', `New goal "${newGoal.name}" established.`, 'success', 'goals', newGoal.id);
     return newGoal;
-  }, [addNotification]);
+  }, [addNotification, markLocalEdit]);
 
   const updateGoal = useCallback((id: string, updates: Partial<Goal>) => {
+    markLocalEdit();
     setGoals((prev) => prev.map((g) => (g.id === id ? { ...g, ...updates } : g)));
-  }, []);
+  }, [markLocalEdit]);
 
   const deleteGoal = useCallback((id: string) => {
+    markLocalEdit(id);
     setGoals((prev) => prev.filter((g) => g.id !== id));
-  }, []);
+  }, [markLocalEdit]);
 
   const toggleMilestone = useCallback((goalId: string, milestoneId: string) => {
+    markLocalEdit();
     setGoals((prev) =>
       prev.map((g) => {
         if (g.id === goalId) {
@@ -2332,9 +2884,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return g;
       })
     );
-  }, []);
+  }, [markLocalEdit]);
 
   const addExpense = useCallback((expData: Omit<Expense, 'id' | 'createdAt'>): Expense => {
+    markLocalEdit();
     const now = new Date().toISOString();
     const newExpense: Expense = {
       ...expData,
@@ -2344,53 +2897,62 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setExpenses((prev) => [newExpense, ...prev]);
     addNotification('Expense Logged', `Recorded ${newExpense.amount} ${newExpense.currency} for ${newExpense.title}.`, 'info', 'budget', newExpense.id);
     return newExpense;
-  }, [addNotification]);
+  }, [addNotification, markLocalEdit]);
 
   const updateExpense = useCallback((id: string, updates: Partial<Expense>) => {
+    markLocalEdit();
     setExpenses((prev) => prev.map((e) => (e.id === id ? { ...e, ...updates } : e)));
-  }, []);
+  }, [markLocalEdit]);
 
   const deleteExpense = useCallback((id: string) => {
+    markLocalEdit(id);
     setExpenses((prev) => prev.filter((e) => e.id !== id));
-  }, []);
+  }, [markLocalEdit]);
 
   const addBudgetCategory = useCallback((catData: Omit<BudgetCategory, 'id'>): BudgetCategory => {
+    markLocalEdit();
     const newCat: BudgetCategory = {
       ...catData,
       id: `cat-${Date.now()}`,
     };
     setBudgetCategories((prev) => [...prev, newCat]);
     return newCat;
-  }, []);
+  }, [markLocalEdit]);
 
   const updateBudgetCategory = useCallback((id: string, updates: Partial<BudgetCategory>) => {
+    markLocalEdit();
     setBudgetCategories((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c)));
-  }, []);
+  }, [markLocalEdit]);
 
   const deleteBudgetCategory = useCallback((id: string) => {
+    markLocalEdit(id);
     setBudgetCategories((prev) => prev.filter((c) => c.id !== id));
-  }, []);
+  }, [markLocalEdit]);
 
   const addSubscription = useCallback((subData: Omit<Subscription, 'id'>): Subscription => {
+    markLocalEdit();
     const newSub: Subscription = {
       ...subData,
       id: `sub-${Date.now()}`,
     };
     setSubscriptions((prev) => [newSub, ...prev]);
     return newSub;
-  }, []);
+  }, [markLocalEdit]);
 
   const updateSubscription = useCallback((id: string, updates: Partial<Subscription>) => {
+    markLocalEdit();
     setSubscriptions((prev) => prev.map((s) => (s.id === id ? { ...s, ...updates } : s)));
-  }, []);
+  }, [markLocalEdit]);
 
   const deleteSubscription = useCallback((id: string) => {
+    markLocalEdit(id);
     setSubscriptions((prev) => prev.filter((s) => s.id !== id));
-  }, []);
+  }, [markLocalEdit]);
 
   const updateSettings = useCallback((newSettings: Partial<UserSettings>) => {
+    markLocalEdit();
     setSettings((prev) => ({ ...prev, ...newSettings }));
-  }, []);
+  }, [markLocalEdit]);
 
   // Background reminder checker
   useEffect(() => {
@@ -2419,6 +2981,159 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const interval = setInterval(checkDeadlinesAndSchedules, 60000);
     return () => clearInterval(interval);
   }, [tasks, subscriptions]);
+
+  // Workspace Backup & Cross-Domain Recovery
+  const exportWorkspaceJSON = useCallback((): string => {
+    const payload = {
+      version: '2.0',
+      exportedAt: new Date().toISOString(),
+      tasks,
+      planBudgets,
+      budgetCategories,
+      clients,
+      timeEntries,
+      invoices,
+      payments,
+      schedules,
+      goals,
+      expenses,
+      subscriptions,
+      companyProfile,
+      workdayHistory,
+      personalSessions,
+      settings,
+    };
+    return JSON.stringify(payload, null, 2);
+  }, [
+    tasks,
+    planBudgets,
+    budgetCategories,
+    clients,
+    timeEntries,
+    invoices,
+    payments,
+    schedules,
+    goals,
+    expenses,
+    subscriptions,
+    companyProfile,
+    workdayHistory,
+    personalSessions,
+    settings,
+  ]);
+
+  const importWorkspaceJSON = useCallback((jsonStr: string): boolean => {
+    try {
+      const data = JSON.parse(jsonStr);
+      if (!data || typeof data !== 'object') return false;
+
+      markLocalEdit();
+
+      if (Array.isArray(data.tasks)) setTasks(data.tasks);
+      if (Array.isArray(data.planBudgets)) setPlanBudgets(data.planBudgets);
+      if (Array.isArray(data.budgetCategories)) setBudgetCategories(data.budgetCategories);
+      if (Array.isArray(data.clients)) setClients(data.clients);
+      if (Array.isArray(data.timeEntries)) setTimeEntries(data.timeEntries);
+      if (Array.isArray(data.invoices)) setInvoices(data.invoices);
+      if (Array.isArray(data.payments)) setPayments(data.payments);
+      if (Array.isArray(data.schedules)) setSchedules(data.schedules);
+      if (Array.isArray(data.goals)) setGoals(data.goals);
+      if (Array.isArray(data.expenses)) setExpenses(data.expenses);
+      if (Array.isArray(data.subscriptions)) setSubscriptions(data.subscriptions);
+      if (data.companyProfile) setCompanyProfile(data.companyProfile);
+      if (Array.isArray(data.workdayHistory)) setWorkdayHistory(data.workdayHistory);
+      if (Array.isArray(data.personalSessions)) setPersonalSessions(data.personalSessions);
+      if (data.settings) setSettings(data.settings);
+
+      // Save imported state to Firestore if signed in
+      if (currentUser?.uid && !currentUser.uid.startsWith('local-user-')) {
+        saveUserWorkspace(currentUser.uid, {
+          tasks: data.tasks || tasks,
+          planBudgets: data.planBudgets || planBudgets,
+          budgetCategories: data.budgetCategories || budgetCategories,
+          clients: data.clients || clients,
+          timeEntries: data.timeEntries || timeEntries,
+          invoices: data.invoices || invoices,
+          payments: data.payments || payments,
+          schedules: data.schedules || schedules,
+          goals: data.goals || goals,
+          expenses: data.expenses || expenses,
+          subscriptions: data.subscriptions || subscriptions,
+          companyProfile: data.companyProfile || companyProfile,
+          workdayHistory: data.workdayHistory || workdayHistory,
+          personalSessions: data.personalSessions || personalSessions,
+          settings: data.settings || settings,
+        })
+          .then(() => {
+            try {
+              localStorage.setItem('freelanceos_owner_uid', currentUser.uid);
+              localStorage.setItem('freelanceos_local_dirty', 'false');
+            } catch {}
+          })
+          .catch((err) => console.error('Save imported workspace error:', err));
+      }
+
+      addNotification('Workspace Imported', 'All tasks, budgets, invoices, and settings successfully restored.', 'success');
+      return true;
+    } catch (err) {
+      console.error('Failed to import workspace JSON:', err);
+      return false;
+    }
+  }, [
+    currentUser?.uid,
+    tasks,
+    planBudgets,
+    budgetCategories,
+    clients,
+    timeEntries,
+    invoices,
+    payments,
+    schedules,
+    goals,
+    expenses,
+    subscriptions,
+    companyProfile,
+    workdayHistory,
+    personalSessions,
+    settings,
+    addNotification,
+    markLocalEdit,
+  ]);
+
+  const restoreEmergencyBackup = useCallback((): boolean => {
+    try {
+      const raw =
+        localStorage.getItem('freelanceos_workspace_emergency_backup') ||
+        localStorage.getItem('freelanceos_workspace_emergency_backup_prev');
+      if (!raw) return false;
+      const data = JSON.parse(raw);
+      if (!data || typeof data !== 'object') return false;
+
+      markLocalEdit();
+
+      if (Array.isArray(data.tasks)) setTasks(data.tasks);
+      if (Array.isArray(data.planBudgets)) setPlanBudgets(data.planBudgets);
+      if (Array.isArray(data.budgetCategories)) setBudgetCategories(data.budgetCategories);
+      if (Array.isArray(data.clients)) setClients(data.clients);
+      if (Array.isArray(data.timeEntries)) setTimeEntries(data.timeEntries);
+      if (Array.isArray(data.invoices)) setInvoices(data.invoices);
+      if (Array.isArray(data.payments)) setPayments(data.payments);
+      if (Array.isArray(data.schedules)) setSchedules(data.schedules);
+      if (Array.isArray(data.goals)) setGoals(data.goals);
+      if (Array.isArray(data.expenses)) setExpenses(data.expenses);
+      if (Array.isArray(data.subscriptions)) setSubscriptions(data.subscriptions);
+      if (data.companyProfile) setCompanyProfile(data.companyProfile);
+      if (Array.isArray(data.workdayHistory)) setWorkdayHistory(data.workdayHistory);
+      if (Array.isArray(data.personalSessions)) setPersonalSessions(data.personalSessions);
+      if (data.settings) setSettings(data.settings);
+
+      addNotification('Backup Restored', 'Workspace snapshot restored successfully from pre-sync cache.', 'success');
+      return true;
+    } catch (e) {
+      console.error('Failed to restore emergency backup:', e);
+      return false;
+    }
+  }, [addNotification, markLocalEdit]);
 
   const value = useMemo(
     () => ({
@@ -2535,6 +3250,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setExpenseModalOpen,
       searchQuery,
       setSearchQuery,
+      exportWorkspaceJSON,
+      importWorkspaceJSON,
+      restoreEmergencyBackup,
+      hasEmergencyBackup,
+      retryCloudSync,
     }),
     [
       activePage,
@@ -2637,6 +3357,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       planBudgetModalOpen,
       expenseModalOpen,
       searchQuery,
+      exportWorkspaceJSON,
+      importWorkspaceJSON,
+      restoreEmergencyBackup,
+      hasEmergencyBackup,
+      retryCloudSync,
     ]
   );
 

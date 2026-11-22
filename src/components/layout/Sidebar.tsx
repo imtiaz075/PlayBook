@@ -35,7 +35,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setMobileOpen,
 }) => {
   const { activePage, setActivePage, tasks, schedules, setQuickAddOpen } = useApp();
-  const { currentUser, setShowLoginModal } = useAuth();
+  const { currentUser, isLocalMode, syncStatus, setShowLoginModal } = useAuth();
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -178,31 +178,69 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Account / Login Footer Card */}
       <div className="p-3 border-t border-slate-800/80">
         {currentUser ? (
-          <div
-            className={`w-full flex items-center gap-2.5 p-2 rounded-lg bg-slate-800/60 border border-slate-700/50 text-left ${
-              collapsed ? 'justify-center p-1.5' : ''
-            }`}
-            title={`Account: ${currentUser.displayName || currentUser.email}`}
-          >
-            <div className="w-6 h-6 rounded-full overflow-hidden bg-indigo-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
-              {currentUser.photoURL ? (
-                <img src={currentUser.photoURL} alt="" className="w-full h-full object-cover" />
-              ) : (
-                (currentUser.displayName || currentUser.email || 'U')[0].toUpperCase()
+          isLocalMode ? (
+            <button
+              type="button"
+              onClick={() => setShowLoginModal(true)}
+              className={`w-full flex items-center gap-2.5 p-2 rounded-lg bg-amber-950/40 hover:bg-amber-900/50 border border-amber-700/50 text-left transition-colors cursor-pointer ${
+                collapsed ? 'justify-center p-1.5' : ''
+              }`}
+              title="Local Storage Only — Click to sign in with Google so your data persists across website updates"
+            >
+              <div className="w-6 h-6 rounded-full overflow-hidden bg-amber-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                {(currentUser.displayName || 'L')[0].toUpperCase()}
+              </div>
+              {!collapsed && (
+                <div className="truncate flex-1 min-w-0">
+                  <span className="text-xs font-semibold text-white block truncate">
+                    Local Workspace
+                  </span>
+                  <span className="text-[10px] text-amber-300 flex items-center gap-1 font-medium truncate">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                    Local Only · Click to Sync
+                  </span>
+                </div>
+              )}
+            </button>
+          ) : (
+            <div
+              className={`w-full flex items-center gap-2.5 p-2 rounded-lg bg-slate-800/60 border border-slate-700/50 text-left ${
+                collapsed ? 'justify-center p-1.5' : ''
+              }`}
+              title={`Account: ${currentUser.displayName || currentUser.email}`}
+            >
+              <div className="w-6 h-6 rounded-full overflow-hidden bg-indigo-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                {currentUser.photoURL ? (
+                  <img src={currentUser.photoURL} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  (currentUser.displayName || currentUser.email || 'U')[0].toUpperCase()
+                )}
+              </div>
+              {!collapsed && (
+                <div className="truncate flex-1 min-w-0">
+                  <span className="text-xs font-semibold text-white block truncate">
+                    {currentUser.displayName || currentUser.email?.split('@')[0]}
+                  </span>
+                  {syncStatus === 'error' ? (
+                    <span className="text-[10px] text-rose-400 flex items-center gap-1 font-medium">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+                      Sync Warning
+                    </span>
+                  ) : syncStatus === 'syncing' ? (
+                    <span className="text-[10px] text-indigo-300 flex items-center gap-1 font-medium">
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+                      Syncing Cloud...
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-medium">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                      Cloud Synced
+                    </span>
+                  )}
+                </div>
               )}
             </div>
-            {!collapsed && (
-              <div className="truncate flex-1 min-w-0">
-                <span className="text-xs font-semibold text-white block truncate">
-                  {currentUser.displayName || currentUser.email?.split('@')[0]}
-                </span>
-                <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-medium">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                  Cloud Synced
-                </span>
-              </div>
-            )}
-          </div>
+          )
         ) : (
           <button
             onClick={() => setShowLoginModal(true)}

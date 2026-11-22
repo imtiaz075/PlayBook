@@ -11,6 +11,7 @@ import {
 
 interface AuthContextType {
   currentUser: AuthUserProfile | null;
+  isLocalMode: boolean;
   isAuthLoading: boolean;
   isLoggingIn: boolean;
   loginWithGoogle: () => Promise<AuthUserProfile | null>;
@@ -19,6 +20,8 @@ interface AuthContextType {
   logout: () => Promise<void>;
   syncStatus: 'idle' | 'syncing' | 'synced' | 'error';
   setSyncStatus: (status: 'idle' | 'syncing' | 'synced' | 'error') => void;
+  syncError: string | null;
+  setSyncError: (err: string | null) => void;
   lastSyncedAt: string | null;
   setLastSyncedAt: (timestamp: string | null) => void;
   showLoginModal: boolean;
@@ -39,8 +42,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
+  const [syncError, setSyncError] = useState<string | null>(null);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
+
+  const isLocalMode = Boolean(currentUser?.uid?.startsWith('local-user-'));
 
   useEffect(() => {
     let isMounted = true;
@@ -114,8 +120,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const loginAsLocalUser = () => {
+    const existingLocalUid = localStorage.getItem('freelanceos_stable_local_uid');
+    const uid = existingLocalUid || 'local-user-' + Math.random().toString(36).substring(2, 9);
+    if (!existingLocalUid) {
+      localStorage.setItem('freelanceos_stable_local_uid', uid);
+    }
     const localProfile: AuthUserProfile = {
-      uid: 'local-user-' + Math.random().toString(36).substring(2, 9),
+      uid,
       email: 'user@localworkspace.app',
       displayName: 'Local Workspace User',
       photoURL: null,
@@ -131,15 +142,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
       console.error('Sign-Out notice:', error);
     }
-    localStorage.removeItem('freelanceos_local_user');
+    try {
+      localStorage.removeItem('freelanceos_local_user');
+      localStorage.removeItem('freelanceos_active_timer');
+      localStorage.removeItem('freelanceos_workday_timer_state');
+      localStorage.removeItem('freelanceos_timer_heartbeat');
+    } catch {}
     setCurrentUser(null);
     setSyncStatus('idle');
+    setSyncError(null);
   };
 
   return (
     <AuthContext.Provider
       value={{
         currentUser,
+        isLocalMode,
         isAuthLoading,
         isLoggingIn,
         loginWithGoogle,
@@ -148,6 +166,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         logout,
         syncStatus,
         setSyncStatus,
+        syncError,
+        setSyncError,
         lastSyncedAt,
         setLastSyncedAt,
         showLoginModal,

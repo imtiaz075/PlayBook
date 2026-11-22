@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Lock,
   ShieldCheck,
@@ -9,6 +9,9 @@ import {
   Sparkles,
   Layers,
   Clock,
+  Copy,
+  Check,
+  FileUp,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -16,6 +19,8 @@ export const AuthWelcomeOverlay: React.FC = () => {
   const { loginWithGoogle, loginWithGoogleRedirect, loginAsLocalUser, isLoggingIn } = useAuth();
   const [authError, setAuthError] = useState<string | null>(null);
   const [errorDetails, setErrorDetails] = useState<string | null>(null);
+  const [isUnauthorizedDomain, setIsUnauthorizedDomain] = useState(false);
+  const [copiedHost, setCopiedHost] = useState(false);
   const [showRedirectOption, setShowRedirectOption] = useState(false);
   const [localSubmitting, setLocalSubmitting] = useState(false);
 
@@ -44,6 +49,7 @@ export const AuthWelcomeOverlay: React.FC = () => {
         setShowRedirectOption(true);
       } else if (code === 'auth/unauthorized-domain') {
         const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'current domain';
+        setIsUnauthorizedDomain(true);
         setAuthError('Firebase Authorized Domain Notice: Domain not authorized in Firebase Console.');
         setErrorDetails(
           `Domain "${currentOrigin}" must be added to your Firebase project authorized domains under Authentication > Settings > Authorized Domains.`
@@ -137,6 +143,25 @@ export const AuthWelcomeOverlay: React.FC = () => {
                   {errorDetails}
                 </div>
               )}
+              {isUnauthorizedDomain && typeof window !== 'undefined' && (
+                <div className="pt-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-t border-rose-800/60 mt-2">
+                  <div className="text-[11px] text-rose-300">
+                    Host: <span className="font-mono text-white font-semibold">{window.location.hostname}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(window.location.hostname);
+                      setCopiedHost(true);
+                      setTimeout(() => setCopiedHost(false), 2000);
+                    }}
+                    className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-rose-100 bg-rose-900 hover:bg-rose-800 border border-rose-700 rounded-md transition-colors cursor-pointer shrink-0"
+                  >
+                    {copiedHost ? <Check size={12} className="text-emerald-300" /> : <Copy size={12} />}
+                    <span>{copiedHost ? 'Copied' : 'Copy Domain for Firebase'}</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -193,13 +218,17 @@ export const AuthWelcomeOverlay: React.FC = () => {
             type="button"
             onClick={loginAsLocalUser}
             disabled={isBusy}
-            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-medium text-xs rounded-xl border border-slate-700 transition-colors cursor-pointer"
+            className={`w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border font-semibold text-xs transition-colors cursor-pointer ${
+              isUnauthorizedDomain
+                ? 'bg-indigo-600 hover:bg-indigo-500 text-white border-indigo-500 shadow-md shadow-indigo-600/30'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700'
+            }`}
           >
             <span>Continue in Local Mode (Offline Storage) →</span>
           </button>
 
-          <p className="text-[11px] text-slate-500">
-            One-click sign-in using your verified Google credentials.
+          <p className="text-[11px] text-slate-400 leading-relaxed">
+            <span className="text-amber-300 font-semibold">Note:</span> Local Mode only saves to this browser session. Sign in with Google to permanently save and restore your workspace across website updates and devices.
           </p>
         </div>
 

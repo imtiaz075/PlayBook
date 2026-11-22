@@ -17,36 +17,81 @@ export const CompanyProfileModal: React.FC<CompanyProfileModalProps> = ({
 }) => {
   const [formData, setFormData] = useState<CompanyProfile>(companyProfile);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [logoPreview, setLogoPreview] = useState<string>(companyProfile?.businessLogo || '');
 
   useEffect(() => {
     setFormData(companyProfile);
     setLogoPreview(companyProfile?.businessLogo || '');
+    setFormError(null);
   }, [companyProfile, isOpen]);
 
   if (!isOpen) return null;
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 1024 * 1024 * 2) {
-        alert('Image size exceeds 2MB limit. Please upload a smaller logo image.');
-        return;
-      }
+  const compressImageToDataUrl = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
       const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Failed to read image file'));
       reader.onloadend = () => {
-        const base64 = reader.result as string;
-        setLogoPreview(base64);
-        setFormData((prev) => ({ ...prev, businessLogo: base64 }));
+        const rawDataUrl = reader.result as string;
+        const img = new Image();
+        img.onerror = () => resolve(rawDataUrl);
+        img.onload = () => {
+          const maxDim = 360;
+          let { width, height } = img;
+          if (width > maxDim || height > maxDim) {
+            if (width >= height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, width);
+          canvas.height = Math.max(1, height);
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(rawDataUrl);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const hasAlpha = file.type === 'image/png' || file.type === 'image/webp';
+          const out = hasAlpha
+            ? canvas.toDataURL('image/png')
+            : canvas.toDataURL('image/jpeg', 0.82);
+          resolve(out.length < rawDataUrl.length ? out : rawDataUrl);
+        };
+        img.src = rawDataUrl;
       };
       reader.readAsDataURL(file);
+    });
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setFormError(null);
+      if (file.size > 1024 * 1024 * 2) {
+        setFormError('Image size exceeds 2MB limit. Please upload a smaller logo image.');
+        return;
+      }
+      try {
+        const compressedBase64 = await compressImageToDataUrl(file);
+        setLogoPreview(compressedBase64);
+        setFormData((prev) => ({ ...prev, businessLogo: compressedBase64 }));
+      } catch {
+        setFormError('Could not process logo image. Please try another file.');
+      }
     }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
     if (!formData.businessName?.trim() && !formData.fullName?.trim()) {
-      alert('Please provide either a Business/Company Name or your Full Name.');
+      setFormError('Please provide either a Business/Company Name or your Full Name.');
       return;
     }
     onSaveCompanyProfile(formData);
@@ -80,6 +125,13 @@ export const CompanyProfileModal: React.FC<CompanyProfileModalProps> = ({
             <X size={18} />
           </button>
         </div>
+
+        {/* Inline Validation Error Banner */}
+        {formError && (
+          <div className="mx-6 mt-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-semibold">
+            {formError}
+          </div>
+        )}
 
         {/* Success Alert Banner */}
         {savedSuccess && (

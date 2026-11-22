@@ -333,110 +333,133 @@ export const BudgetPage: React.FC<BudgetPageProps> = () => {
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {planBudgets.map((b) => {
-                  return (
-                    <div
-                      key={b.id}
-                      className="p-5 bg-white border border-purple-200/90 rounded-2xl shadow-2xs hover:shadow-md transition-all space-y-4"
-                    >
-                      <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="px-2 py-0.5 text-[10px] font-bold uppercase rounded-md bg-purple-100 text-purple-800">
-                              {b.period}
-                            </span>
-                            <span className="text-xs text-slate-500 font-mono">
-                              {b.startDate} to {b.endDate}
+              {planBudgets.length === 0 ? (
+                <div className="p-8 bg-slate-50 border border-dashed border-slate-300 rounded-2xl text-center space-y-3">
+                  <Wallet size={28} className="mx-auto text-purple-400" />
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900">No Planned Budgets Yet</h4>
+                    <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                      Create a planned budget to track category allocations against your actual expenses.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setEditingPlanBudget(null);
+                      setPlanBudgetModalOpen(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-500 rounded-lg shadow-xs cursor-pointer"
+                  >
+                    <Plus size={14} />
+                    <span>Create Plan Budget</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {planBudgets.map((b) => {
+                    const allocations = Array.isArray(b.categoryAllocations) ? b.categoryAllocations : [];
+                    return (
+                      <div
+                        key={b.id}
+                        className="p-5 bg-white border border-purple-200/90 rounded-2xl shadow-2xs hover:shadow-md transition-all space-y-4"
+                      >
+                        <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="px-2 py-0.5 text-[10px] font-bold uppercase rounded-md bg-purple-100 text-purple-800">
+                                {b.period || 'monthly'}
+                              </span>
+                              <span className="text-xs text-slate-500 font-mono">
+                                {b.startDate} to {b.endDate}
+                              </span>
+                            </div>
+                            <h4 className="text-base font-bold text-slate-900 mt-1">{b.name}</h4>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => {
+                                setEditingPlanBudget(b);
+                                setPlanBudgetModalOpen(true);
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-purple-600 rounded-lg transition-colors"
+                              title="Edit Plan Budget"
+                            >
+                              <Edit size={14} />
+                            </button>
+                            <button
+                              onClick={() => setDeletingBudgetPlanId(b.id)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors"
+                              title="Delete Plan Budget"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between p-3 bg-purple-50/60 rounded-xl border border-purple-100">
+                          <div>
+                            <span className="text-xs font-semibold text-purple-900 block">Total Planned Budget</span>
+                            <span className="text-lg font-bold font-mono text-purple-900">
+                              {b.currency || 'USD'} {(b.totalPlannedBudget ?? 0).toLocaleString()}
                             </span>
                           </div>
-                          <h4 className="text-base font-bold text-slate-900 mt-1">{b.name}</h4>
+                          <div className="text-right">
+                            <span className="text-xs text-slate-500 block">Allocated Categories</span>
+                            <span className="text-sm font-bold text-slate-800 font-mono">
+                              {allocations.length} categories
+                            </span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => {
-                              setEditingPlanBudget(b);
-                              setPlanBudgetModalOpen(true);
-                            }}
-                            className="p-1.5 text-slate-400 hover:text-purple-600 rounded-lg transition-colors"
-                            title="Edit Plan Budget"
-                          >
-                            <Edit size={14} />
-                          </button>
-                          <button
-                            onClick={() => setDeletingBudgetPlanId(b.id)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors"
-                            title="Delete Plan Budget"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </div>
 
-                      <div className="flex items-center justify-between p-3 bg-purple-50/60 rounded-xl border border-purple-100">
-                        <div>
-                          <span className="text-xs font-semibold text-purple-900 block">Total Planned Budget</span>
-                          <span className="text-lg font-bold font-mono text-purple-900">
-                            {b.currency} {b.totalPlannedBudget.toLocaleString()}
-                          </span>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-xs text-slate-500 block">Allocated Categories</span>
-                          <span className="text-sm font-bold text-slate-800 font-mono">
-                            {b.categoryAllocations.length} categories
-                          </span>
-                        </div>
-                      </div>
+                        {/* Category Allocations Breakdown */}
+                        <div className="space-y-2">
+                          <span className="text-xs font-bold text-slate-700 block">Category Allocations vs Actual Spending:</span>
+                          <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                            {allocations.map((alloc, idx) => {
+                              const allocCatLower = (alloc.category || '').toLowerCase();
+                              const actualSpent = expenses
+                                .filter((e) => (e.category || '').toLowerCase() === allocCatLower)
+                                .reduce((s, e) => s + (e.amount || 0), 0);
+                              const isExceeded = actualSpent > alloc.plannedAmount;
+                              const isApproaching = actualSpent >= alloc.plannedAmount * 0.85;
 
-                      {/* Category Allocations Breakdown */}
-                      <div className="space-y-2">
-                        <span className="text-xs font-bold text-slate-700 block">Category Allocations vs Actual Spending:</span>
-                        <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                          {b.categoryAllocations.map((alloc, idx) => {
-                            const allocCatLower = (alloc.category || '').toLowerCase();
-                            const actualSpent = expenses
-                              .filter((e) => (e.category || '').toLowerCase() === allocCatLower)
-                              .reduce((s, e) => s + (e.amount || 0), 0);
-                            const isExceeded = actualSpent > alloc.plannedAmount;
-                            const isApproaching = actualSpent >= alloc.plannedAmount * 0.85;
-
-                            return (
-                              <div
-                                key={idx}
-                                className={`p-2.5 rounded-xl border text-xs flex flex-col gap-1.5 ${
-                                  isExceeded
-                                    ? 'bg-rose-50 border-rose-200'
-                                    : isApproaching
-                                    ? 'bg-amber-50 border-amber-200'
-                                    : 'bg-slate-50 border-slate-200'
-                                }`}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <span className="font-semibold text-slate-900">{alloc.category}</span>
-                                  <div className="flex items-center gap-2 font-mono">
-                                    <span className="text-slate-500">
-                                      Spent: ${actualSpent} /
-                                    </span>
-                                    <span className="font-bold text-slate-900">
-                                      Plan: ${alloc.plannedAmount}
-                                    </span>
+                              return (
+                                <div
+                                  key={idx}
+                                  className={`p-2.5 rounded-xl border text-xs flex flex-col gap-1.5 ${
+                                    isExceeded
+                                      ? 'bg-rose-50 border-rose-200'
+                                      : isApproaching
+                                      ? 'bg-amber-50 border-amber-200'
+                                      : 'bg-slate-50 border-slate-200'
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-semibold text-slate-900">{alloc.category}</span>
+                                    <div className="flex items-center gap-2 font-mono">
+                                      <span className="text-slate-500">
+                                        Spent: ${actualSpent} /
+                                      </span>
+                                      <span className="font-bold text-slate-900">
+                                        Plan: ${alloc.plannedAmount}
+                                      </span>
+                                    </div>
                                   </div>
+                                  {isExceeded && (
+                                    <span className="text-[10px] font-bold text-rose-600 flex items-center gap-1">
+                                      <AlertTriangle size={11} />
+                                      Exceeded planned limit by ${(actualSpent - alloc.plannedAmount).toFixed(2)}
+                                    </span>
+                                  )}
                                 </div>
-                                {isExceeded && (
-                                  <span className="text-[10px] font-bold text-rose-600 flex items-center gap-1">
-                                    <AlertTriangle size={11} />
-                                    Exceeded planned limit by ${(actualSpent - alloc.plannedAmount).toFixed(2)}
-                                  </span>
-                                )}
-                              </div>
-                            );
-                          })}
+                              );
+                            })}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
